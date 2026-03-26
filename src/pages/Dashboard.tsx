@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, Briefcase, Phone, ClipboardCheck, TrendingUp, TrendingDown, Clock, ArrowRight } from 'lucide-react';
+import { Users, Briefcase, Phone, ClipboardCheck, TrendingUp, TrendingDown, Clock, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const stats = [
@@ -28,10 +28,10 @@ const recentActivity = [
 ];
 
 const scheduledCalls = [
-  { candidate: 'Alex Johnson', job: 'Sr. React Developer', time: '2:00 PM' },
-  { candidate: 'Maria Garcia', job: 'Full-Stack Engineer', time: '2:30 PM' },
-  { candidate: 'James Wilson', job: 'DevOps Engineer', time: '3:15 PM' },
-  { candidate: 'Lisa Chen', job: 'Product Designer', time: '4:00 PM' },
+  { candidate: 'Lisa Chen', job: 'Product Designer', time: '2:00 PM', source: 'cal.com' },
+  { candidate: 'David Kim', job: 'Data Analyst', time: '10:00 AM', source: 'cal.com' },
+  { candidate: 'Sarah Miller', job: 'Backend Engineer', time: '11:30 AM', source: 'cal.com' },
+  { candidate: 'Alex Johnson', job: 'Sr. React Developer', time: '2:30 PM', source: null },
 ];
 
 const topJobs = [
@@ -81,7 +81,6 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Activity Feed */}
           <Card className="shadow-card">
             <CardHeader>
               <CardTitle className="text-base">Recent Activity</CardTitle>
@@ -105,7 +104,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Pipeline */}
           <Card className="shadow-card">
             <CardHeader>
               <CardTitle className="text-base">Application Pipeline</CardTitle>
@@ -132,10 +130,9 @@ export default function Dashboard() {
 
         {/* Right column */}
         <div className="space-y-6">
-          {/* Scheduled Calls */}
           <Card className="shadow-card">
             <CardHeader>
-              <CardTitle className="text-base">Upcoming Calls</CardTitle>
+              <CardTitle className="text-base">Upcoming Interviews</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -146,9 +143,16 @@ export default function Dashboard() {
                       <p className="text-xs text-muted-foreground truncate">{call.job}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <Badge variant="outline" className="text-xs">
-                        <Clock className="h-3 w-3 mr-1" />{call.time}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge variant="outline" className="text-xs">
+                          <Clock className="h-3 w-3 mr-1" />{call.time}
+                        </Badge>
+                        {call.source === 'cal.com' && (
+                          <Badge variant="outline" className="text-xs border-primary/20 text-primary bg-primary/5">
+                            <Calendar className="h-3 w-3 mr-1" />Cal.com
+                          </Badge>
+                        )}
+                      </div>
                       <Button size="sm" variant="outline" className="h-7 text-xs">
                         <Phone className="h-3 w-3" />
                       </Button>
@@ -159,7 +163,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Top Jobs Chart */}
           <Card className="shadow-card">
             <CardHeader>
               <CardTitle className="text-base">Top Jobs by Applications</CardTitle>
