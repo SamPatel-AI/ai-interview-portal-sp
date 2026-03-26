@@ -13,6 +13,7 @@ import { Plus, Search, Upload, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { TableSkeleton } from '@/components/PageSkeleton';
 import EmptyState from '@/components/EmptyState';
+import CandidateDetailSheet from '@/components/CandidateDetailSheet';
 
 interface Candidate {
   id: string;
@@ -37,6 +38,8 @@ export default function Candidates() {
   const [search, setSearch] = useState('');
   const [page] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -54,10 +57,8 @@ export default function Candidates() {
   const createMutation = useMutation({
     mutationFn: async (candidate: { first_name: string; last_name: string; email: string; phone: string; source: string }) => {
       const result = await apiRequest<ApiResponse<Candidate>>('/api/candidates', {
-        method: 'POST',
-        body: JSON.stringify(candidate),
+        method: 'POST', body: JSON.stringify(candidate),
       });
-      // Upload resume if provided
       if (resumeFile && result.data?.id) {
         const formData = new FormData();
         formData.append('resume', resumeFile);
@@ -71,13 +72,13 @@ export default function Candidates() {
       setDialogOpen(false);
       setFirstName(''); setLastName(''); setEmail(''); setPhone(''); setSource(''); setResumeFile(null);
     },
-    onError: (err: Error) => {
-      toast({ title: 'Failed to create candidate', description: err.message, variant: 'destructive' });
-    },
+    onError: (err: Error) => toast({ title: 'Failed to create candidate', description: err.message, variant: 'destructive' }),
   });
 
   const candidates = data?.data ?? [];
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+  const openDetail = (id: string) => { setSelectedId(id); setSheetOpen(true); };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -91,9 +92,7 @@ export default function Candidates() {
             <Button><Plus className="h-4 w-4 mr-2" />Add Candidate</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add New Candidate</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>Add New Candidate</DialogTitle></DialogHeader>
             <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate({ first_name: firstName, last_name: lastName, email, phone, source }); }} className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>First Name</Label><Input placeholder="John" value={firstName} onChange={e => setFirstName(e.target.value)} required /></div>
@@ -150,7 +149,7 @@ export default function Candidates() {
               </TableHeader>
               <TableBody>
                 {candidates.map((c) => (
-                  <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50">
+                  <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(c.id)}>
                     <TableCell className="font-medium">{c.first_name} {c.last_name}</TableCell>
                     <TableCell className="text-muted-foreground">{c.email}</TableCell>
                     <TableCell className="text-muted-foreground">{c.phone}</TableCell>
@@ -164,6 +163,8 @@ export default function Candidates() {
           </CardContent>
         </Card>
       )}
+
+      <CandidateDetailSheet candidateId={selectedId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
   );
 }

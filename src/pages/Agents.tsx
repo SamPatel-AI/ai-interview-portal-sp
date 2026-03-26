@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
@@ -6,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Bot, Mic, Settings } from 'lucide-react';
 import { CardGridSkeleton } from '@/components/PageSkeleton';
 import EmptyState from '@/components/EmptyState';
+import AgentBuilder from '@/components/AgentBuilder';
 
 interface Agent {
   id: string;
@@ -26,6 +28,9 @@ const styleBadge = (style: string) => {
 };
 
 export default function Agents() {
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [editAgentId, setEditAgentId] = useState<string | null>(null);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['agents'],
     queryFn: () => apiRequest<ApiResponse<Agent[]>>('/api/agents?active_only=false'),
@@ -33,11 +38,14 @@ export default function Agents() {
 
   const agents = data?.data ?? [];
 
+  const openCreate = () => { setEditAgentId(null); setBuilderOpen(true); };
+  const openEdit = (id: string) => { setEditAgentId(id); setBuilderOpen(true); };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <p className="text-muted-foreground">Configure AI interview agents for automated candidate screening.</p>
-        <Button><Plus className="h-4 w-4 mr-2" />Create New Agent</Button>
+        <Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" />Create New Agent</Button>
       </div>
 
       {isLoading ? (
@@ -45,11 +53,11 @@ export default function Agents() {
       ) : error ? (
         <EmptyState icon={Bot} title="Failed to load agents" description={error instanceof Error ? error.message : 'An error occurred'} />
       ) : agents.length === 0 ? (
-        <EmptyState icon={Bot} title="No AI agents yet" description="Create your first AI interview agent to start screening candidates automatically." actionLabel="Create Agent" onAction={() => {}} />
+        <EmptyState icon={Bot} title="No AI agents yet" description="Create your first AI interview agent to start screening candidates automatically." actionLabel="Create Agent" onAction={openCreate} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {agents.map((agent) => (
-            <Card key={agent.id} className="shadow-card hover:shadow-elevated transition-shadow cursor-pointer">
+            <Card key={agent.id} className="shadow-card hover:shadow-elevated transition-shadow cursor-pointer" onClick={() => openEdit(agent.id)}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
@@ -65,7 +73,6 @@ export default function Agents() {
                     {agent.is_active ? 'Active' : 'Inactive'}
                   </Badge>
                 </div>
-
                 <div className="space-y-2 mt-4">
                   <div className="flex items-center gap-2 text-sm">
                     <Mic className="h-3.5 w-3.5 text-muted-foreground" />
@@ -78,16 +85,17 @@ export default function Agents() {
                     <Badge variant={styleBadge(agent.interview_style) as "default" | "secondary" | "outline"} className="text-xs capitalize">{agent.interview_style || 'Default'}</Badge>
                   </div>
                 </div>
-
                 <div className="flex items-center justify-between mt-4 pt-3 border-t">
                   <span className="text-xs text-muted-foreground">{agent.jobs_count ?? 0} jobs assigned</span>
-                  <Button variant="ghost" size="sm" className="text-xs">Configure →</Button>
+                  <Button variant="ghost" size="sm" className="text-xs" onClick={(e) => { e.stopPropagation(); openEdit(agent.id); }}>Configure →</Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <AgentBuilder open={builderOpen} onOpenChange={setBuilderOpen} agentId={editAgentId} />
     </div>
   );
 }

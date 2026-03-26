@@ -8,6 +8,7 @@ import { LayoutGrid, List, CheckCircle, XCircle, Mail, ClipboardCheck } from 'lu
 import { useToast } from '@/hooks/use-toast';
 import { TableSkeleton } from '@/components/PageSkeleton';
 import EmptyState from '@/components/EmptyState';
+import ApplicationDetailSheet from '@/components/ApplicationDetailSheet';
 
 interface Application {
   id: string;
@@ -53,6 +54,8 @@ const canActOn = (status: string) =>
 
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -79,6 +82,7 @@ export default function Applications() {
 
   const handleApprove = (id: string) => updateStatusMutation.mutate({ id, status: 'shortlisted' });
   const handleReject = (id: string) => updateStatusMutation.mutate({ id, status: 'rejected' });
+  const openDetail = (id: string) => { setSelectedAppId(id); setSheetOpen(true); };
 
   const apps = [...(data?.data ?? [])].sort((a, b) => (b.ai_screening_score ?? 0) - (a.ai_screening_score ?? 0));
   const candidateName = (app: Application) =>
@@ -114,7 +118,7 @@ export default function Applications() {
                 </div>
                 <div className="space-y-2">
                   {filtered.map((app) => (
-                    <Card key={app.id} className="shadow-card cursor-pointer hover:shadow-elevated transition-shadow">
+                    <Card key={app.id} className="shadow-card cursor-pointer hover:shadow-elevated transition-shadow" onClick={() => openDetail(app.id)}>
                       <CardContent className="p-3">
                         <p className="text-sm font-medium text-foreground">{candidateName(app)}</p>
                         <p className="text-xs text-muted-foreground mt-1">{app.jobs?.title ?? 'Unknown Job'}</p>
@@ -168,7 +172,7 @@ export default function Applications() {
               </thead>
               <tbody>
                 {apps.map((app) => (
-                  <tr key={app.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer">
+                  <tr key={app.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => openDetail(app.id)}>
                     <td className="p-3 text-sm font-medium">{candidateName(app)}</td>
                     <td className="p-3 text-sm text-muted-foreground">{app.jobs?.title ?? 'Unknown'}</td>
                     <td className="p-3">
@@ -192,10 +196,10 @@ export default function Applications() {
                     <td className="p-3">
                       {canActOn(app.status) ? (
                         <div className="flex items-center justify-center gap-1">
-                          <Button size="sm" variant="outline" className="h-8 text-xs text-success hover:bg-success/10 hover:text-success border-success/20" onClick={() => handleApprove(app.id)}>
+                          <Button size="sm" variant="outline" className="h-8 text-xs text-success hover:bg-success/10 hover:text-success border-success/20" onClick={(e) => { e.stopPropagation(); handleApprove(app.id); }}>
                             <CheckCircle className="h-3.5 w-3.5 mr-1" />Approve
                           </Button>
-                          <Button size="sm" variant="outline" className="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20" onClick={() => handleReject(app.id)}>
+                          <Button size="sm" variant="outline" className="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20" onClick={(e) => { e.stopPropagation(); handleReject(app.id); }}>
                             <XCircle className="h-3.5 w-3.5 mr-1" />Reject
                           </Button>
                         </div>
@@ -210,6 +214,8 @@ export default function Applications() {
           </CardContent>
         </Card>
       )}
+
+      <ApplicationDetailSheet applicationId={selectedAppId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
   );
 }

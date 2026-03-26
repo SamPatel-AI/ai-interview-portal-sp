@@ -9,6 +9,7 @@ import { Plus, Search, RefreshCw, Briefcase, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { TableSkeleton } from '@/components/PageSkeleton';
 import EmptyState from '@/components/EmptyState';
+import CreateJobDialog from '@/components/CreateJobDialog';
 
 interface Job {
   id: string;
@@ -33,6 +34,7 @@ const statusColors: Record<string, string> = {
 export default function Jobs() {
   const [search, setSearch] = useState('');
   const [page] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -47,9 +49,7 @@ export default function Jobs() {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       toast({ title: 'CEIPAL sync complete', description: `Created: ${result.created}, Updated: ${result.updated}` });
     },
-    onError: (err: Error) => {
-      toast({ title: 'Sync failed', description: err.message, variant: 'destructive' });
-    },
+    onError: (err: Error) => toast({ title: 'Sync failed', description: err.message, variant: 'destructive' }),
   });
 
   const jobs = data?.data ?? [];
@@ -67,7 +67,7 @@ export default function Jobs() {
             {syncMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Sync from CEIPAL
           </Button>
-          <Button><Plus className="h-4 w-4 mr-2" />Add Job</Button>
+          <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Job</Button>
         </div>
       </div>
 
@@ -76,7 +76,7 @@ export default function Jobs() {
       ) : error ? (
         <EmptyState icon={Briefcase} title="Failed to load jobs" description={error instanceof Error ? error.message : 'An error occurred'} />
       ) : jobs.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No jobs yet" description="Create your first job posting or sync from CEIPAL." actionLabel="Add Job" onAction={() => {}} />
+        <EmptyState icon={Briefcase} title="No jobs yet" description="Create your first job posting or sync from CEIPAL." actionLabel="Add Job" onAction={() => setCreateOpen(true)} />
       ) : (
         <Card className="shadow-card">
           <CardContent className="p-0">
@@ -113,6 +113,8 @@ export default function Jobs() {
           </CardContent>
         </Card>
       )}
+
+      <CreateJobDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }
