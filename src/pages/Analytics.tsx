@@ -68,7 +68,7 @@ export default function Analytics() {
 
   const { data: agentStatsData } = useQuery({
     queryKey: ['analytics-agent', selectedAgentId],
-    queryFn: () => apiRequest<ApiResponse<AgentStats>>(`/api/analytics/job/${selectedAgentId}`),
+    queryFn: () => apiRequest<ApiResponse<AgentStats>>(`/api/analytics/agent/${selectedAgentId}`),
     enabled: !!selectedAgentId,
   });
 
