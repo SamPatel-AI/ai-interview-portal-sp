@@ -220,19 +220,47 @@ export default function Analytics() {
           </Select>
 
           {aStats ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card className="shadow-card"><CardContent className="p-5">
-                <p className="text-sm text-muted-foreground">Total Calls</p>
-                <p className="text-2xl font-bold text-foreground mt-1">{aStats.total_calls}</p>
-              </CardContent></Card>
-              <Card className="shadow-card"><CardContent className="p-5">
-                <p className="text-sm text-muted-foreground">Success Rate</p>
-                <p className="text-2xl font-bold text-foreground mt-1">{aStats.success_rate ? `${aStats.success_rate}%` : '—'}</p>
-              </CardContent></Card>
-              <Card className="shadow-card"><CardContent className="p-5">
-                <p className="text-sm text-muted-foreground">Avg Duration</p>
-                <p className="text-2xl font-bold text-foreground mt-1">{aStats.avg_duration ? `${Math.round(aStats.avg_duration / 60)}m` : '—'}</p>
-              </CardContent></Card>
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-semibold text-foreground">{aStats.agent_name}</h3>
+                {aStats.company_name && <span className="text-sm text-muted-foreground">• {aStats.company_name}</span>}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <Card className="shadow-card"><CardContent className="p-5">
+                  <p className="text-sm text-muted-foreground">Total Calls</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{aStats.total_calls}</p>
+                </CardContent></Card>
+                <Card className="shadow-card"><CardContent className="p-5">
+                  <p className="text-sm text-muted-foreground">Completed</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{aStats.completed_calls}</p>
+                </CardContent></Card>
+                <Card className="shadow-card"><CardContent className="p-5">
+                  <p className="text-sm text-muted-foreground">Success Rate</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{aStats.success_rate != null ? `${aStats.success_rate}%` : '—'}</p>
+                </CardContent></Card>
+                <Card className="shadow-card"><CardContent className="p-5">
+                  <p className="text-sm text-muted-foreground">Avg Duration</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{aStats.avg_duration_minutes != null ? `${aStats.avg_duration_minutes}m` : '—'}</p>
+                </CardContent></Card>
+              </div>
+              {aStats.calls_by_status?.length > 0 && (
+                <Card className="shadow-card">
+                  <CardHeader><CardTitle className="text-base">Calls by Status</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <PieChart>
+                        <Pie data={aStats.calls_by_status} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+                          {aStats.calls_by_status.map((_, i) => (
+                            <Cell key={i} fill={['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--destructive))', 'hsl(var(--info))'][i % 5]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           ) : (
             <Card className="shadow-card"><CardContent className="p-12 text-center">
