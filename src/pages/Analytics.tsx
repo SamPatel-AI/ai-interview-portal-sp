@@ -29,9 +29,14 @@ interface RecruiterStats {
 interface Agent { id: string; name: string }
 
 interface AgentStats {
+  agent_name: string;
+  company_name: string;
   total_calls: number;
+  completed_calls: number;
   success_rate: number;
-  avg_duration: number;
+  avg_duration_minutes: number;
+  sentiment_breakdown: Record<string, number>;
+  calls_by_status: { name: string; value: number }[];
 }
 
 export default function Analytics() {
