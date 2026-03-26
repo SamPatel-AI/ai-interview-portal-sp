@@ -1,32 +1,59 @@
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Search, RefreshCw } from 'lucide-react';
+import { Plus, Search, RefreshCw, Briefcase, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { TableSkeleton } from '@/components/PageSkeleton';
+import EmptyState from '@/components/EmptyState';
+
+interface Job {
+  id: string;
+  job_code: string;
+  title: string;
+  status: string;
+  ai_agent_id: string | null;
+  recruiter_name?: string;
+  applications_count?: number;
+  created_at: string;
+  client_companies?: { name: string };
+  ai_agents?: { name: string } | null;
+}
 
 const statusColors: Record<string, string> = {
-  Open: 'bg-success text-success-foreground',
-  Closed: 'bg-destructive text-destructive-foreground',
-  'On Hold': 'bg-warning text-warning-foreground',
-  Filled: 'bg-info text-info-foreground',
+  open: 'bg-success text-success-foreground',
+  closed: 'bg-destructive text-destructive-foreground',
+  on_hold: 'bg-warning text-warning-foreground',
+  filled: 'bg-info text-info-foreground',
 };
-
-const mockJobs = [
-  { id: '1', code: 'JOB-001', title: 'Senior React Developer', company: 'TechCorp', status: 'Open', agent: 'TechBot', recruiter: 'Sarah K.', apps: 45, created: '2024-03-10' },
-  { id: '2', code: 'JOB-002', title: 'Full-Stack Engineer', company: 'Innovate Inc', status: 'Open', agent: 'GenBot', recruiter: 'John D.', apps: 38, created: '2024-03-09' },
-  { id: '3', code: 'JOB-003', title: 'DevOps Engineer', company: 'CloudScale', status: 'On Hold', agent: 'None', recruiter: 'Emily R.', apps: 31, created: '2024-03-08' },
-  { id: '4', code: 'JOB-004', title: 'Product Designer', company: 'DesignLab', status: 'Open', agent: 'DesignBot', recruiter: 'Sarah K.', apps: 27, created: '2024-03-07' },
-  { id: '5', code: 'JOB-005', title: 'Data Analyst', company: 'DataDriven', status: 'Closed', agent: 'None', recruiter: 'John D.', apps: 22, created: '2024-03-05' },
-  { id: '6', code: 'JOB-006', title: 'Backend Engineer', company: 'TechCorp', status: 'Filled', agent: 'TechBot', recruiter: 'Emily R.', apps: 19, created: '2024-03-01' },
-];
 
 export default function Jobs() {
   const [search, setSearch] = useState('');
-  const filtered = mockJobs.filter(j =>
-    j.title.toLowerCase().includes(search.toLowerCase()) || j.code.toLowerCase().includes(search.toLowerCase())
-  );
+  const [page] = useState(1);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['jobs', page, search],
+    queryFn: () => apiRequest<ApiResponse<Job[]>>(`/api/jobs?page=${page}&limit=20&search=${search}`),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: () => apiRequest<{ synced: number; created: number; updated: number }>('/api/jobs/sync-ceipal', { method: 'POST' }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      toast({ title: 'CEIPAL sync complete', description: `Created: ${result.created}, Updated: ${result.updated}` });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Sync failed', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const jobs = data?.data ?? [];
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -36,47 +63,56 @@ export default function Jobs() {
           <Input placeholder="Search jobs..." className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <div className="flex gap-2">
-          <Button variant="outline"><RefreshCw className="h-4 w-4 mr-2" />Sync from CEIPAL</Button>
+          <Button variant="outline" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+            {syncMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Sync from CEIPAL
+          </Button>
           <Button><Plus className="h-4 w-4 mr-2" />Add Job</Button>
         </div>
       </div>
 
-      <Card className="shadow-card">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job Code</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>AI Agent</TableHead>
-                <TableHead>Recruiter</TableHead>
-                <TableHead>Applications</TableHead>
-                <TableHead>Created</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((j) => (
-                <TableRow key={j.id} className="cursor-pointer hover:bg-muted/50">
-                  <TableCell className="font-mono text-sm text-muted-foreground">{j.code}</TableCell>
-                  <TableCell className="font-medium">{j.title}</TableCell>
-                  <TableCell className="text-muted-foreground">{j.company}</TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[j.status]}`}>
-                      {j.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{j.agent}</TableCell>
-                  <TableCell className="text-muted-foreground">{j.recruiter}</TableCell>
-                  <TableCell>{j.apps}</TableCell>
-                  <TableCell className="text-muted-foreground">{j.created}</TableCell>
+      {isLoading ? (
+        <TableSkeleton cols={8} />
+      ) : error ? (
+        <EmptyState icon={Briefcase} title="Failed to load jobs" description={error instanceof Error ? error.message : 'An error occurred'} />
+      ) : jobs.length === 0 ? (
+        <EmptyState icon={Briefcase} title="No jobs yet" description="Create your first job posting or sync from CEIPAL." actionLabel="Add Job" onAction={() => {}} />
+      ) : (
+        <Card className="shadow-card">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job Code</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>AI Agent</TableHead>
+                  <TableHead>Applications</TableHead>
+                  <TableHead>Created</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {jobs.map((j) => (
+                  <TableRow key={j.id} className="cursor-pointer hover:bg-muted/50">
+                    <TableCell className="font-mono text-sm text-muted-foreground">{j.job_code}</TableCell>
+                    <TableCell className="font-medium">{j.title}</TableCell>
+                    <TableCell className="text-muted-foreground">{j.client_companies?.name ?? '—'}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[j.status] || 'bg-muted text-muted-foreground'}`}>
+                        {j.status?.replace('_', ' ')}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{j.ai_agents?.name ?? 'None'}</TableCell>
+                    <TableCell>{j.applications_count ?? 0}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(j.created_at)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

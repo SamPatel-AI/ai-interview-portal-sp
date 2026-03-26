@@ -1,77 +1,93 @@
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, List, CheckCircle, XCircle, Mail } from 'lucide-react';
+import { LayoutGrid, List, CheckCircle, XCircle, Mail, ClipboardCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { TableSkeleton } from '@/components/PageSkeleton';
+import EmptyState from '@/components/EmptyState';
 
-const statuses = ['New', 'Screening', 'Interviewed', 'Shortlisted', 'Rejected', 'Hired'] as const;
+interface Application {
+  id: string;
+  status: string;
+  ai_screening_score: number | null;
+  created_at: string;
+  candidates?: { first_name: string; last_name: string };
+  jobs?: { title: string };
+}
 
-const statusColors: Record<string, string> = {
-  New: 'bg-info/10 text-info border-info/20',
-  Screening: 'bg-warning/10 text-warning border-warning/20',
-  Interviewed: 'bg-primary/10 text-primary border-primary/20',
-  Shortlisted: 'bg-accent/10 text-accent border-accent/20',
-  Rejected: 'bg-destructive/10 text-destructive border-destructive/20',
-  Hired: 'bg-success/10 text-success border-success/20',
+const statuses = ['new', 'screening', 'interviewed', 'shortlisted', 'rejected', 'hired'] as const;
+
+const statusLabels: Record<string, string> = {
+  new: 'New', screening: 'Screening', interviewed: 'Interviewed',
+  shortlisted: 'Shortlisted', rejected: 'Rejected', hired: 'Hired',
 };
 
-const initialApps = [
-  { id: '1', candidate: 'Alex Johnson', job: 'Sr. React Developer', score: 8.5, status: 'Screening', date: 'Mar 15', invitationSent: false },
-  { id: '2', candidate: 'Maria Garcia', job: 'Full-Stack Engineer', score: 7.2, status: 'New', date: 'Mar 14', invitationSent: false },
-  { id: '3', candidate: 'James Wilson', job: 'DevOps Engineer', score: 6.1, status: 'Interviewed', date: 'Mar 13', invitationSent: false },
-  { id: '4', candidate: 'Lisa Chen', job: 'Product Designer', score: 9.0, status: 'Shortlisted', date: 'Mar 12', invitationSent: true },
-  { id: '5', candidate: 'Robert Davis', job: 'Sr. React Developer', score: 4.5, status: 'Rejected', date: 'Mar 11', invitationSent: false },
-  { id: '6', candidate: 'Emma Thompson', job: 'Full-Stack Engineer', score: 8.8, status: 'Hired', date: 'Mar 10', invitationSent: true },
-  { id: '7', candidate: 'David Kim', job: 'Data Analyst', score: 7.0, status: 'New', date: 'Mar 14', invitationSent: false },
-  { id: '8', candidate: 'Sarah Miller', job: 'Backend Engineer', score: 5.5, status: 'Screening', date: 'Mar 13', invitationSent: false },
-];
+const statusColors: Record<string, string> = {
+  new: 'bg-info/10 text-info border-info/20',
+  screening: 'bg-warning/10 text-warning border-warning/20',
+  interviewed: 'bg-primary/10 text-primary border-primary/20',
+  shortlisted: 'bg-accent/10 text-accent border-accent/20',
+  rejected: 'bg-destructive/10 text-destructive border-destructive/20',
+  hired: 'bg-success/10 text-success border-success/20',
+};
 
-const scoreColor = (score: number) => {
+const scoreColor = (score: number | null) => {
+  if (score === null) return 'text-muted-foreground';
   if (score >= 7) return 'text-success';
   if (score >= 4) return 'text-warning';
   return 'text-destructive';
 };
 
-const scoreBg = (score: number) => {
+const scoreBg = (score: number | null) => {
+  if (score === null) return 'bg-muted border-muted';
   if (score >= 7) return 'bg-success/10 border-success/20';
   if (score >= 4) return 'bg-warning/10 border-warning/20';
   return 'bg-destructive/10 border-destructive/20';
 };
 
+const canActOn = (status: string) =>
+  !['shortlisted', 'rejected', 'hired'].includes(status);
+
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
-  const [apps, setApps] = useState(() =>
-    [...initialApps].sort((a, b) => b.score - a.score)
-  );
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const handleApprove = (id: string) => {
-    setApps(prev =>
-      prev.map(app =>
-        app.id === id ? { ...app, status: 'Shortlisted', invitationSent: true } : app
-      )
-    );
-    toast({
-      title: '✅ Candidate approved',
-      description: 'Invitation email sent automatically',
-    });
-  };
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['applications'],
+    queryFn: () => apiRequest<ApiResponse<Application[]>>('/api/applications?page=1&limit=100'),
+  });
 
-  const handleReject = (id: string) => {
-    setApps(prev =>
-      prev.map(app =>
-        app.id === id ? { ...app, status: 'Rejected' } : app
-      )
-    );
-    toast({
-      title: '❌ Candidate rejected',
-      description: 'Application status updated to Rejected',
-    });
-  };
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiRequest(`/api/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
+      if (variables.status === 'shortlisted') {
+        toast({ title: '✅ Candidate approved', description: 'Invitation email sent automatically' });
+      } else if (variables.status === 'rejected') {
+        toast({ title: '❌ Candidate rejected', description: 'Application status updated to Rejected' });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Failed to update status', description: err.message, variant: 'destructive' });
+    },
+  });
 
-  const canActOn = (status: string) =>
-    !['Shortlisted', 'Rejected', 'Hired'].includes(status);
+  const handleApprove = (id: string) => updateStatusMutation.mutate({ id, status: 'shortlisted' });
+  const handleReject = (id: string) => updateStatusMutation.mutate({ id, status: 'rejected' });
+
+  const apps = [...(data?.data ?? [])].sort((a, b) => (b.ai_screening_score ?? 0) - (a.ai_screening_score ?? 0));
+  const candidateName = (app: Application) =>
+    app.candidates ? `${app.candidates.first_name} ${app.candidates.last_name}` : 'Unknown';
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  if (isLoading) return <TableSkeleton cols={6} />;
+  if (error) return <EmptyState icon={ClipboardCheck} title="Failed to load applications" description={error instanceof Error ? error.message : 'An error occurred'} />;
+  if (apps.length === 0) return <EmptyState icon={ClipboardCheck} title="No applications yet" description="Applications will appear here when candidates apply to your jobs." />;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -93,22 +109,22 @@ export default function Applications() {
             return (
               <div key={status} className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-foreground">{status}</h3>
+                  <h3 className="text-sm font-medium text-foreground">{statusLabels[status]}</h3>
                   <Badge variant="secondary" className="text-xs">{filtered.length}</Badge>
                 </div>
                 <div className="space-y-2">
                   {filtered.map((app) => (
                     <Card key={app.id} className="shadow-card cursor-pointer hover:shadow-elevated transition-shadow">
                       <CardContent className="p-3">
-                        <p className="text-sm font-medium text-foreground">{app.candidate}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{app.job}</p>
+                        <p className="text-sm font-medium text-foreground">{candidateName(app)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{app.jobs?.title ?? 'Unknown Job'}</p>
                         <div className="flex items-center justify-between mt-2">
-                          <span className={`inline-flex items-center justify-center h-8 w-8 rounded-lg border text-sm font-bold ${scoreColor(app.score)} ${scoreBg(app.score)}`}>
-                            {app.score}
+                          <span className={`inline-flex items-center justify-center h-8 w-8 rounded-lg border text-sm font-bold ${scoreColor(app.ai_screening_score)} ${scoreBg(app.ai_screening_score)}`}>
+                            {app.ai_screening_score ?? '—'}
                           </span>
-                          <span className="text-xs text-muted-foreground">{app.date}</span>
+                          <span className="text-xs text-muted-foreground">{formatDate(app.created_at)}</span>
                         </div>
-                        {app.invitationSent && app.status === 'Shortlisted' && (
+                        {app.status === 'shortlisted' && (
                           <div className="flex items-center gap-1 mt-2 text-xs text-accent">
                             <Mail className="h-3 w-3" /> Invitation sent
                           </div>
@@ -153,26 +169,26 @@ export default function Applications() {
               <tbody>
                 {apps.map((app) => (
                   <tr key={app.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer">
-                    <td className="p-3 text-sm font-medium">{app.candidate}</td>
-                    <td className="p-3 text-sm text-muted-foreground">{app.job}</td>
+                    <td className="p-3 text-sm font-medium">{candidateName(app)}</td>
+                    <td className="p-3 text-sm text-muted-foreground">{app.jobs?.title ?? 'Unknown'}</td>
                     <td className="p-3">
-                      <span className={`inline-flex items-center justify-center h-9 w-12 rounded-lg border text-base font-bold ${scoreColor(app.score)} ${scoreBg(app.score)}`}>
-                        {app.score}
+                      <span className={`inline-flex items-center justify-center h-9 w-12 rounded-lg border text-base font-bold ${scoreColor(app.ai_screening_score)} ${scoreBg(app.ai_screening_score)}`}>
+                        {app.ai_screening_score ?? '—'}
                       </span>
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[app.status]}`}>
-                          {app.status}
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[app.status] || ''}`}>
+                          {statusLabels[app.status] || app.status}
                         </span>
-                        {app.invitationSent && app.status === 'Shortlisted' && (
+                        {app.status === 'shortlisted' && (
                           <span className="inline-flex items-center gap-1 text-xs text-accent">
                             <Mail className="h-3 w-3" /> Sent
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="p-3 text-sm text-muted-foreground">{app.date}</td>
+                    <td className="p-3 text-sm text-muted-foreground">{formatDate(app.created_at)}</td>
                     <td className="p-3">
                       {canActOn(app.status) ? (
                         <div className="flex items-center justify-center gap-1">

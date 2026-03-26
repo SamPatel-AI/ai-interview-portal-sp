@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -5,11 +7,28 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
+
+interface UserProfile {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  organization?: { name: string };
+}
 
 export default function SettingsPage() {
   const { user } = useAuth();
+
+  const { data } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: () => apiRequest<ApiResponse<UserProfile>>('/api/auth/me'),
+    retry: false,
+  });
+
+  const profile = data?.data;
+  const displayName = profile?.full_name || user?.user_metadata?.full_name || '';
+  const displayEmail = profile?.email || user?.email || '';
 
   return (
     <div className="max-w-3xl space-y-6 animate-fade-in">
@@ -28,7 +47,7 @@ export default function SettingsPage() {
               <div className="flex items-center gap-4">
                 <Avatar className="h-16 w-16">
                   <AvatarFallback className="bg-primary text-primary-foreground text-lg">
-                    {user?.user_metadata?.full_name?.[0] || '?'}
+                    {displayName?.[0] || '?'}
                   </AvatarFallback>
                 </Avatar>
                 <Button variant="outline" size="sm">Change Avatar</Button>
@@ -36,11 +55,11 @@ export default function SettingsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Full Name</Label>
-                  <Input defaultValue={user?.user_metadata?.full_name || ''} />
+                  <Input defaultValue={displayName} />
                 </div>
                 <div className="space-y-2">
                   <Label>Email</Label>
-                  <Input value={user?.email || ''} disabled />
+                  <Input value={displayEmail} disabled />
                 </div>
               </div>
               <Button>Save Changes</Button>
@@ -52,7 +71,10 @@ export default function SettingsPage() {
           <Card className="shadow-card">
             <CardHeader><CardTitle className="text-base">Organization Settings</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2"><Label>Organization Name</Label><Input defaultValue="Saanvi AI" /></div>
+              <div className="space-y-2">
+                <Label>Organization Name</Label>
+                <Input defaultValue={profile?.organization?.name || ''} />
+              </div>
               <Button>Save</Button>
             </CardContent>
           </Card>
@@ -62,35 +84,16 @@ export default function SettingsPage() {
           <Card className="shadow-card">
             <CardHeader><CardTitle className="text-base">Team Members</CardTitle></CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {[
-                  { name: 'Sarah Kim', email: 'sarah@saanvi.ai', role: 'Admin' },
-                  { name: 'John Doe', email: 'john@saanvi.ai', role: 'Recruiter' },
-                  { name: 'Emily Rose', email: 'emily@saanvi.ai', role: 'Recruiter' },
-                ].map((member) => (
-                  <div key={member.email} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-primary/10 text-primary text-xs">{member.name[0]}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{member.name}</p>
-                        <p className="text-xs text-muted-foreground">{member.email}</p>
-                      </div>
-                    </div>
-                    <Badge variant="outline">{member.role}</Badge>
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm text-muted-foreground text-center py-6">Team management coming soon.</p>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="integrations" className="mt-6 space-y-4">
           {[
-            { name: 'CEIPAL', status: 'Connected', desc: 'Last synced 2 hours ago' },
+            { name: 'CEIPAL', status: 'Connected', desc: 'ATS integration' },
             { name: 'Retell AI', status: 'Connected', desc: 'Voice AI platform' },
-            { name: 'Microsoft Outlook', status: 'Not connected', desc: 'Email integration' },
+            { name: 'Cal.com', status: 'Connected', desc: 'Scheduling platform' },
           ].map((int) => (
             <Card key={int.name} className="shadow-card">
               <CardContent className="p-4 flex items-center justify-between">

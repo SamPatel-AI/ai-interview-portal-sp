@@ -1,24 +1,38 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest, ApiResponse } from '@/lib/api';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Bot, Mic, Settings } from 'lucide-react';
+import { CardGridSkeleton } from '@/components/PageSkeleton';
+import EmptyState from '@/components/EmptyState';
 
-const mockAgents = [
-  { id: '1', name: 'TechBot', company: 'TechCorp', voice: 'Aria', style: 'Technical', active: true, jobs: 3 },
-  { id: '2', name: 'GenBot', company: 'Innovate Inc', voice: 'Mark', style: 'Conversational', active: true, jobs: 2 },
-  { id: '3', name: 'DesignBot', company: 'DesignLab', voice: 'Sophie', style: 'Formal', active: false, jobs: 1 },
-  { id: '4', name: 'DataAgent', company: 'DataDriven', voice: 'James', style: 'Technical', active: true, jobs: 1 },
-];
+interface Agent {
+  id: string;
+  name: string;
+  voice_id: string;
+  interview_style: string;
+  is_active: boolean;
+  client_companies?: { name: string };
+  jobs_count?: number;
+}
 
 const styleBadge = (style: string) => {
   switch (style) {
-    case 'Technical': return 'default';
-    case 'Conversational': return 'secondary';
+    case 'technical': return 'default';
+    case 'conversational': return 'secondary';
     default: return 'outline';
   }
 };
 
 export default function Agents() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['agents'],
+    queryFn: () => apiRequest<ApiResponse<Agent[]>>('/api/agents?active_only=false'),
+  });
+
+  const agents = data?.data ?? [];
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -26,46 +40,54 @@ export default function Agents() {
         <Button><Plus className="h-4 w-4 mr-2" />Create New Agent</Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {mockAgents.map((agent) => (
-          <Card key={agent.id} className="shadow-card hover:shadow-elevated transition-shadow cursor-pointer">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Bot className="h-5 w-5 text-primary" />
+      {isLoading ? (
+        <CardGridSkeleton count={4} />
+      ) : error ? (
+        <EmptyState icon={Bot} title="Failed to load agents" description={error instanceof Error ? error.message : 'An error occurred'} />
+      ) : agents.length === 0 ? (
+        <EmptyState icon={Bot} title="No AI agents yet" description="Create your first AI interview agent to start screening candidates automatically." actionLabel="Create Agent" onAction={() => {}} />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {agents.map((agent) => (
+            <Card key={agent.id} className="shadow-card hover:shadow-elevated transition-shadow cursor-pointer">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Bot className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">{agent.name}</h3>
+                      <p className="text-xs text-muted-foreground">{agent.client_companies?.name ?? 'No company'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">{agent.name}</h3>
-                    <p className="text-xs text-muted-foreground">{agent.company}</p>
+                  <Badge variant={agent.is_active ? 'default' : 'secondary'}>
+                    {agent.is_active ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+
+                <div className="space-y-2 mt-4">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mic className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">Voice:</span>
+                    <span className="text-foreground">{agent.voice_id || 'Default'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">Style:</span>
+                    <Badge variant={styleBadge(agent.interview_style) as "default" | "secondary" | "outline"} className="text-xs capitalize">{agent.interview_style || 'Default'}</Badge>
                   </div>
                 </div>
-                <Badge variant={agent.active ? 'default' : 'secondary'}>
-                  {agent.active ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
 
-              <div className="space-y-2 mt-4">
-                <div className="flex items-center gap-2 text-sm">
-                  <Mic className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground">Voice:</span>
-                  <span className="text-foreground">{agent.voice}</span>
+                <div className="flex items-center justify-between mt-4 pt-3 border-t">
+                  <span className="text-xs text-muted-foreground">{agent.jobs_count ?? 0} jobs assigned</span>
+                  <Button variant="ghost" size="sm" className="text-xs">Configure →</Button>
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Settings className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground">Style:</span>
-                  <Badge variant={styleBadge(agent.style) as "default" | "secondary" | "outline"} className="text-xs">{agent.style}</Badge>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-4 pt-3 border-t">
-                <span className="text-xs text-muted-foreground">{agent.jobs} jobs assigned</span>
-                <Button variant="ghost" size="sm" className="text-xs">Configure →</Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

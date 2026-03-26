@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { hasSupabaseConfig, supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, orgName?: string, orgId?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -51,13 +52,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, orgName?: string, orgId?: string) => {
     if (!hasSupabaseConfig) throw new Error(AUTH_NOT_CONFIGURED_ERROR);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
+    
+    // Call backend to create both Supabase auth user AND users table profile
+    await apiRequest('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        password,
+        full_name: fullName,
+        org_name: orgName || undefined,
+        org_id: orgId || undefined,
+      }),
     });
+
+    // Sign in to get a session
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   };
 
