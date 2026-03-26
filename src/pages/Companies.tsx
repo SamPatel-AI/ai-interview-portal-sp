@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Plus, Search, Building2, Briefcase, Bot } from 'lucide-react';
 import { CardGridSkeleton } from '@/components/PageSkeleton';
 import EmptyState from '@/components/EmptyState';
+import CreateCompanyDialog from '@/components/CreateCompanyDialog';
 
 interface Company {
   id: string;
@@ -19,6 +20,7 @@ interface Company {
 
 export default function Companies() {
   const [search, setSearch] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['companies', search],
@@ -34,7 +36,7 @@ export default function Companies() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search companies..." className="pl-8" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <Button><Plus className="h-4 w-4 mr-2" />Add Company</Button>
+        <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Company</Button>
       </div>
 
       {isLoading ? (
@@ -42,7 +44,7 @@ export default function Companies() {
       ) : error ? (
         <EmptyState icon={Building2} title="Failed to load companies" description={error instanceof Error ? error.message : 'An error occurred'} />
       ) : companies.length === 0 ? (
-        <EmptyState icon={Building2} title="No companies yet" description="Add your first client company to start organizing jobs and agents." actionLabel="Add Company" onAction={() => {}} />
+        <EmptyState icon={Building2} title="No companies yet" description="Add your first client company to start organizing jobs and agents." actionLabel="Add Company" onAction={() => setCreateOpen(true)} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {companies.map((company) => (
@@ -70,6 +72,8 @@ export default function Companies() {
           ))}
         </div>
       )}
+
+      <CreateCompanyDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

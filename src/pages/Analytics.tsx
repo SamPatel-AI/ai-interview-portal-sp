@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Users, Phone, Star, TrendingUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { StatsSkeleton } from '@/components/PageSkeleton';
@@ -17,10 +19,52 @@ interface AnalyticsOverview {
   apps_by_status?: { status: string; count: number }[];
 }
 
+interface RecruiterStats {
+  total_applications: number;
+  completed_calls: number;
+  avg_call_duration: number;
+  evaluations: { decision: string; count: number }[];
+}
+
+interface Agent { id: string; name: string }
+
+interface AgentStats {
+  total_calls: number;
+  success_rate: number;
+  avg_duration: number;
+}
+
 export default function Analytics() {
+  const [selectedAgentId, setSelectedAgentId] = useState('');
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['analytics-overview'],
     queryFn: () => apiRequest<ApiResponse<AnalyticsOverview>>('/api/analytics/overview'),
+  });
+
+  const { data: meData } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: () => apiRequest<ApiResponse<{ id: string; full_name: string }>>('/api/auth/me'),
+    retry: false,
+  });
+
+  const recruiterId = meData?.data?.id;
+
+  const { data: recruiterData } = useQuery({
+    queryKey: ['analytics-recruiter', recruiterId],
+    queryFn: () => apiRequest<ApiResponse<RecruiterStats>>(`/api/analytics/recruiter/${recruiterId}`),
+    enabled: !!recruiterId,
+  });
+
+  const { data: agentsData } = useQuery({
+    queryKey: ['agents-for-analytics'],
+    queryFn: () => apiRequest<ApiResponse<Agent[]>>('/api/agents?active_only=false'),
+  });
+
+  const { data: agentStatsData } = useQuery({
+    queryKey: ['analytics-agent', selectedAgentId],
+    queryFn: () => apiRequest<ApiResponse<AgentStats>>(`/api/analytics/job/${selectedAgentId}`),
+    enabled: !!selectedAgentId,
   });
 
   if (isLoading) return <div className="space-y-6"><StatsSkeleton /></div>;
@@ -37,6 +81,9 @@ export default function Analytics() {
   const callsOverTime = overview?.calls_over_time ?? [];
   const callOutcomes = overview?.call_outcomes ?? [];
   const appsByStatus = overview?.apps_by_status ?? [];
+  const rStats = recruiterData?.data;
+  const aStats = agentStatsData?.data;
+  const agents = agentsData?.data ?? [];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -119,20 +166,74 @@ export default function Analytics() {
           )}
         </TabsContent>
 
-        <TabsContent value="recruiter" className="mt-6">
-          <Card className="shadow-card">
-            <CardContent className="p-12 text-center">
-              <p className="text-muted-foreground">Select a recruiter to view performance metrics.</p>
-            </CardContent>
-          </Card>
+        <TabsContent value="recruiter" className="mt-6 space-y-6">
+          {rStats ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card className="shadow-card"><CardContent className="p-5">
+                  <p className="text-sm text-muted-foreground">Total Applications</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{rStats.total_applications}</p>
+                </CardContent></Card>
+                <Card className="shadow-card"><CardContent className="p-5">
+                  <p className="text-sm text-muted-foreground">Completed Calls</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{rStats.completed_calls}</p>
+                </CardContent></Card>
+                <Card className="shadow-card"><CardContent className="p-5">
+                  <p className="text-sm text-muted-foreground">Avg Call Duration</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{rStats.avg_call_duration ? `${Math.round(rStats.avg_call_duration / 60)}m` : '—'}</p>
+                </CardContent></Card>
+              </div>
+              {rStats.evaluations?.length > 0 && (
+                <Card className="shadow-card">
+                  <CardHeader><CardTitle className="text-base">Evaluations</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={rStats.evaluations}>
+                        <XAxis dataKey="decision" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip />
+                        <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <Card className="shadow-card"><CardContent className="p-12 text-center">
+              <p className="text-muted-foreground">Loading your performance data...</p>
+            </CardContent></Card>
+          )}
         </TabsContent>
 
-        <TabsContent value="agent" className="mt-6">
-          <Card className="shadow-card">
-            <CardContent className="p-12 text-center">
-              <p className="text-muted-foreground">Select an agent to view performance metrics.</p>
-            </CardContent>
-          </Card>
+        <TabsContent value="agent" className="mt-6 space-y-6">
+          <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+            <SelectTrigger className="max-w-xs"><SelectValue placeholder="Select an agent" /></SelectTrigger>
+            <SelectContent>
+              {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {aStats ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Card className="shadow-card"><CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">Total Calls</p>
+                <p className="text-2xl font-bold text-foreground mt-1">{aStats.total_calls}</p>
+              </CardContent></Card>
+              <Card className="shadow-card"><CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">Success Rate</p>
+                <p className="text-2xl font-bold text-foreground mt-1">{aStats.success_rate ? `${aStats.success_rate}%` : '—'}</p>
+              </CardContent></Card>
+              <Card className="shadow-card"><CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">Avg Duration</p>
+                <p className="text-2xl font-bold text-foreground mt-1">{aStats.avg_duration ? `${Math.round(aStats.avg_duration / 60)}m` : '—'}</p>
+              </CardContent></Card>
+            </div>
+          ) : (
+            <Card className="shadow-card"><CardContent className="p-12 text-center">
+              <p className="text-muted-foreground">{selectedAgentId ? 'Loading agent stats...' : 'Select an agent to view performance.'}</p>
+            </CardContent></Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>
