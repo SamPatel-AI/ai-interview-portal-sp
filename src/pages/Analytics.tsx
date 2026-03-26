@@ -1,36 +1,43 @@
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Users, Phone, Star, TrendingUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { StatsSkeleton } from '@/components/PageSkeleton';
+import EmptyState from '@/components/EmptyState';
 
-const kpis = [
-  { label: 'Total Candidates', value: '2,847', icon: Users },
-  { label: 'Total Calls', value: '1,234', icon: Phone },
-  { label: 'Avg Screening Score', value: '7.2', icon: Star },
-  { label: 'Hire Rate', value: '18%', icon: TrendingUp },
-];
-
-const callsOverTime = [
-  { date: 'Mar 1', calls: 12 }, { date: 'Mar 5', calls: 18 }, { date: 'Mar 9', calls: 24 },
-  { date: 'Mar 13', calls: 15 }, { date: 'Mar 17', calls: 30 }, { date: 'Mar 21', calls: 22 },
-  { date: 'Mar 25', calls: 28 },
-];
-
-const callOutcomes = [
-  { name: 'Completed', value: 65, color: 'hsl(142, 76%, 36%)' },
-  { name: 'No Answer', value: 15, color: 'hsl(220, 9%, 46%)' },
-  { name: 'Voicemail', value: 10, color: 'hsl(199, 89%, 48%)' },
-  { name: 'Failed', value: 7, color: 'hsl(0, 84%, 60%)' },
-  { name: 'Interrupted', value: 3, color: 'hsl(38, 92%, 50%)' },
-];
-
-const appsByStatus = [
-  { status: 'New', count: 156 }, { status: 'Screening', count: 89 },
-  { status: 'Interviewed', count: 45 }, { status: 'Shortlisted', count: 23 },
-  { status: 'Rejected', count: 67 }, { status: 'Hired', count: 12 },
-];
+interface AnalyticsOverview {
+  total_candidates: number;
+  total_calls: number;
+  avg_screening_score?: number;
+  hire_rate?: number;
+  calls_over_time?: { date: string; calls: number }[];
+  call_outcomes?: { name: string; value: number; color: string }[];
+  apps_by_status?: { status: string; count: number }[];
+}
 
 export default function Analytics() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['analytics-overview'],
+    queryFn: () => apiRequest<ApiResponse<AnalyticsOverview>>('/api/analytics/overview'),
+  });
+
+  if (isLoading) return <div className="space-y-6"><StatsSkeleton /></div>;
+  if (error) return <EmptyState title="Failed to load analytics" description={error instanceof Error ? error.message : 'An error occurred'} />;
+
+  const overview = data?.data;
+  const kpis = [
+    { label: 'Total Candidates', value: overview?.total_candidates?.toLocaleString() ?? '0', icon: Users },
+    { label: 'Total Calls', value: overview?.total_calls?.toLocaleString() ?? '0', icon: Phone },
+    { label: 'Avg Screening Score', value: overview?.avg_screening_score?.toFixed(1) ?? '—', icon: Star },
+    { label: 'Hire Rate', value: overview?.hire_rate ? `${overview.hire_rate}%` : '—', icon: TrendingUp },
+  ];
+
+  const callsOverTime = overview?.calls_over_time ?? [];
+  const callOutcomes = overview?.call_outcomes ?? [];
+  const appsByStatus = overview?.apps_by_status ?? [];
+
   return (
     <div className="space-y-6 animate-fade-in">
       <Tabs defaultValue="overview">
@@ -59,50 +66,57 @@ export default function Analytics() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {(callsOverTime.length > 0 || callOutcomes.length > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {callsOverTime.length > 0 && (
+                <Card className="shadow-card">
+                  <CardHeader><CardTitle className="text-base">Calls Over Time</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <LineChart data={callsOverTime}>
+                        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="calls" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+              {callOutcomes.length > 0 && (
+                <Card className="shadow-card">
+                  <CardHeader><CardTitle className="text-base">Call Outcomes</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <PieChart>
+                        <Pie data={callOutcomes} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+                          {callOutcomes.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {appsByStatus.length > 0 && (
             <Card className="shadow-card">
-              <CardHeader><CardTitle className="text-base">Calls Over Time</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">Applications by Status</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={callsOverTime}>
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <BarChart data={appsByStatus}>
+                    <XAxis dataKey="status" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip />
-                    <Line type="monotone" dataKey="calls" stroke="hsl(239, 84%, 67%)" strokeWidth={2} dot={{ r: 4 }} />
-                  </LineChart>
+                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-
-            <Card className="shadow-card">
-              <CardHeader><CardTitle className="text-base">Call Outcomes</CardTitle></CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie data={callOutcomes} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                      {callOutcomes.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="shadow-card">
-            <CardHeader><CardTitle className="text-base">Applications by Status</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={appsByStatus}>
-                  <XAxis dataKey="status" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="hsl(239, 84%, 67%)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="recruiter" className="mt-6">
