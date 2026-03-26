@@ -27,8 +27,8 @@ export default function Signup() {
     }
     setLoading(true);
     try {
-      await signUp(email, password, fullName);
-      toast({ title: 'Account created!', description: 'Check your email to verify your account.' });
+      await signUp(email, password, fullName, orgName);
+      toast({ title: 'Account created!', description: 'Welcome to Saanvi Interview Portal.' });
       navigate('/dashboard');
     } catch (err: unknown) {
       toast({
