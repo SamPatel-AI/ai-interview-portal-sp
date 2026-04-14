@@ -1,0 +1,1 @@
+{"domain":"settings","displayName":"Settings","priority":20,"dependencies":["auth"],"description":"Organization settings, team management, scheduling config","status":"active"}

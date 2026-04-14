@@ -1,0 +1,1 @@
+{"domain":"agents","displayName":"AI Agents","priority":9,"dependencies":["auth","companies"],"description":"AI interviewing agent configuration and management","status":"active"}

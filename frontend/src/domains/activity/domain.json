@@ -1,0 +1,1 @@
+{"domain":"activity","displayName":"Activity Log","priority":16,"dependencies":["auth"],"description":"Audit trail of all user and system actions","status":"active"}

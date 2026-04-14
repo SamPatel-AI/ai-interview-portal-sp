@@ -1,0 +1,1 @@
+{"domain":"emails","displayName":"Emails","priority":12,"dependencies":["auth","candidates","applications"],"description":"Email log viewing and tracking","status":"active"}
