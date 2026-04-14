@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,16 +6,7 @@ import { Plus, Bot, Mic, Settings } from 'lucide-react';
 import { CardGridSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import AgentBuilder from '@/components/organisms/agents/AgentBuilder';
-
-interface Agent {
-  id: string;
-  name: string;
-  voice_id: string;
-  interview_style: string;
-  is_active: boolean;
-  client_companies?: { name: string };
-  jobs_count?: number;
-}
+import { useAgents } from '@/domains/agents';
 
 const styleBadge = (style: string) => {
   switch (style) {
@@ -31,11 +20,7 @@ export default function Agents() {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editAgentId, setEditAgentId] = useState<string | null>(null);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['agents'],
-    queryFn: () => apiRequest<ApiResponse<Agent[]>>('/api/agents?active_only=false'),
-  });
-
+  const { data, isLoading, error } = useAgents();
   const agents = data?.data ?? [];
 
   const openCreate = () => { setEditAgentId(null); setBuilderOpen(true); };
@@ -86,7 +71,7 @@ export default function Agents() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-4 pt-3 border-t">
-                  <span className="text-xs text-muted-foreground">{agent.jobs_count ?? 0} jobs assigned</span>
+                  <span className="text-xs text-muted-foreground">{(agent as any).jobs_count ?? 0} jobs assigned</span>
                   <Button variant="ghost" size="sm" className="text-xs" onClick={(e) => { e.stopPropagation(); openEdit(agent.id); }}>Configure →</Button>
                 </div>
               </CardContent>
