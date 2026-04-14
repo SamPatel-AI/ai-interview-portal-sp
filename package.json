@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "cd frontend && npx vite",
-    "build": "cd frontend && npx vite build",
-    "build:dev": "cd frontend && npx vite build --mode development",
+    "build": "cd frontend && npx vite build --outDir ../dist --emptyOutDir",
+    "build:dev": "cd frontend && npx vite build --mode development --outDir ../dist --emptyOutDir",
     "preview": "cd frontend && npx vite preview",
     "lint": "cd frontend && npx eslint .",
     "test": "cd frontend && npx vitest run",
