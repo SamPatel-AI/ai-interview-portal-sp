@@ -1,0 +1,1 @@
+{"domain":"calls","displayName":"Calls","priority":8,"dependencies":["auth","applications","agents"],"description":"AI voice interviews, call scheduling, evaluation, resumption","status":"active"}

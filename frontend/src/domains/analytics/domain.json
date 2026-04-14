@@ -1,0 +1,1 @@
+{"domain":"analytics","displayName":"Analytics","priority":15,"dependencies":["auth"],"description":"Dashboard KPIs, recruiter/agent/job performance analytics","status":"active"}

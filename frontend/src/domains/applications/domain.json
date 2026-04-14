@@ -1,0 +1,1 @@
+{"domain":"applications","displayName":"Applications","priority":7,"dependencies":["auth","candidates","jobs"],"description":"Application pipeline, AI screening, recruiter assignment","status":"active"}

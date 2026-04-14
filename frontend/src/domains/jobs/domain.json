@@ -1,0 +1,1 @@
+{"domain":"jobs","displayName":"Jobs","priority":6,"dependencies":["auth","companies","agents"],"description":"Job postings, CEIPAL sync, interview stages, priority management","status":"active"}
