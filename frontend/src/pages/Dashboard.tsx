@@ -1,24 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, Briefcase, Phone, ClipboardCheck, TrendingUp, TrendingDown, Clock, Calendar } from 'lucide-react';
+import { Users, Briefcase, Phone, ClipboardCheck, Clock, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { DashboardSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
-
-interface DashboardOverview {
-  total_candidates: number;
-  open_jobs: number;
-  total_calls: number;
-  calls_today: number;
-  pending_reviews: number;
-  recent_activity: { user: string; action: string; time: string }[];
-  scheduled_calls?: { candidate: string; job: string; time: string; source: string | null }[];
-  top_jobs?: { name: string; apps: number }[];
-  pipeline?: { stage: string; count: number }[];
-}
+import { useOverview } from '@/domains/analytics';
 
 const pipelineColors: Record<string, string> = {
   New: 'bg-info',
@@ -29,10 +16,7 @@ const pipelineColors: Record<string, string> = {
 };
 
 export default function Dashboard() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard-overview'],
-    queryFn: () => apiRequest<ApiResponse<DashboardOverview>>('/api/analytics/overview'),
-  });
+  const { data, isLoading, error } = useOverview();
 
   if (isLoading) return <DashboardSkeleton />;
 
@@ -45,7 +29,7 @@ export default function Dashboard() {
     );
   }
 
-  const overview = data.data;
+  const overview = data.data as any;
 
   const stats = [
     { label: 'Total Candidates', value: overview.total_candidates?.toLocaleString() ?? '0', icon: Users },
@@ -66,7 +50,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
           <Card key={stat.label} className="shadow-card">
@@ -85,28 +68,22 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Two column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
           <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle className="text-base">Recent Activity</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Recent Activity</CardTitle></CardHeader>
             <CardContent>
               {recentActivity.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
               ) : (
                 <div className="space-y-4">
-                  {recentActivity.map((item, i) => (
+                  {recentActivity.map((item: any, i: number) => (
                     <div key={i} className="flex items-start gap-3">
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                         <span className="text-xs font-medium text-primary">{item.user[0]}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground">
-                          <span className="font-medium">{item.user}</span> {item.action}
-                        </p>
+                        <p className="text-sm text-foreground"><span className="font-medium">{item.user}</span> {item.action}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">{item.time}</p>
                       </div>
                     </div>
@@ -118,12 +95,10 @@ export default function Dashboard() {
 
           {pipeline.length > 0 && (
             <Card className="shadow-card">
-              <CardHeader>
-                <CardTitle className="text-base">Application Pipeline</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-base">Application Pipeline</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {pipeline.map((stage) => (
+                  {pipeline.map((stage: any) => (
                     <div key={stage.stage} className="flex items-center gap-3">
                       <span className="text-sm text-muted-foreground w-24 shrink-0">{stage.stage}</span>
                       <div className="flex-1 bg-muted rounded-full h-6 overflow-hidden">
@@ -142,18 +117,15 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Right column */}
         <div className="space-y-6">
           <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle className="text-base">Upcoming Interviews</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Upcoming Interviews</CardTitle></CardHeader>
             <CardContent>
               {scheduledCalls.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">No upcoming interviews</p>
               ) : (
                 <div className="space-y-3">
-                  {scheduledCalls.map((call, i) => (
+                  {scheduledCalls.map((call: any, i: number) => (
                     <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{call.candidate}</p>
@@ -161,18 +133,14 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="flex flex-col items-end gap-1">
-                          <Badge variant="outline" className="text-xs">
-                            <Clock className="h-3 w-3 mr-1" />{call.time}
-                          </Badge>
+                          <Badge variant="outline" className="text-xs"><Clock className="h-3 w-3 mr-1" />{call.time}</Badge>
                           {call.source === 'cal.com' && (
                             <Badge variant="outline" className="text-xs border-primary/20 text-primary bg-primary/5">
                               <Calendar className="h-3 w-3 mr-1" />Cal.com
                             </Badge>
                           )}
                         </div>
-                        <Button size="sm" variant="outline" className="h-7 text-xs">
-                          <Phone className="h-3 w-3" />
-                        </Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs"><Phone className="h-3 w-3" /></Button>
                       </div>
                     </div>
                   ))}
@@ -183,9 +151,7 @@ export default function Dashboard() {
 
           {topJobs.length > 0 && (
             <Card className="shadow-card">
-              <CardHeader>
-                <CardTitle className="text-base">Top Jobs by Applications</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-base">Top Jobs by Applications</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={topJobs} layout="vertical">

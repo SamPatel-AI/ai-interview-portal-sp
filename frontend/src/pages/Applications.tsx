@@ -1,46 +1,22 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LayoutGrid, List, CheckCircle, XCircle, Mail, ClipboardCheck, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import ApplicationDetailSheet from '@/components/organisms/applications/ApplicationDetailSheet';
-
-interface Application {
-  id: string;
-  status: string;
-  ai_screening_score: number | { score: number; explanation?: string } | null;
-  created_at: string;
-  candidates?: { first_name: string; last_name: string };
-  jobs?: { title: string };
-}
+import { useApplications, useApproveInterview, useUpdateApplication } from '@/domains/applications';
+import type { Application } from '@/domains/applications';
+import { APPLICATION_STATUS_COLORS, APPLICATION_STATUS_LABELS } from '@/lib/constants';
 
 const getScore = (score: Application['ai_screening_score']): number | null => {
   if (score === null || score === undefined) return null;
   if (typeof score === 'number') return score;
-  if (typeof score === 'object' && 'score' in score) return score.score;
   return null;
 };
 
 const statuses = ['new', 'screening', 'interviewed', 'shortlisted', 'rejected', 'hired'] as const;
-
-const statusLabels: Record<string, string> = {
-  new: 'New', screening: 'Screening', interviewed: 'Interviewed',
-  shortlisted: 'Shortlisted', rejected: 'Rejected', hired: 'Hired',
-};
-
-const statusColors: Record<string, string> = {
-  new: 'bg-info/10 text-info border-info/20',
-  screening: 'bg-warning/10 text-warning border-warning/20',
-  interviewed: 'bg-primary/10 text-primary border-primary/20',
-  shortlisted: 'bg-accent/10 text-accent border-accent/20',
-  rejected: 'bg-destructive/10 text-destructive border-destructive/20',
-  hired: 'bg-success/10 text-success border-success/20',
-};
 
 const scoreColor = (score: number | null) => {
   if (score === null) return 'text-muted-foreground';
@@ -60,43 +36,10 @@ export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['applications'],
-    queryFn: () => apiRequest<ApiResponse<Application[]>>('/api/applications?page=1&limit=100'),
-  });
-
-  // Pre-interview: Approve for Interview (sends invitation email)
-  const approveInterviewMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiRequest(`/api/applications/${id}/approve-interview`, { method: 'POST' }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] });
-      toast({ title: 'Invitation sent', description: 'Candidate will receive interview booking link' });
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Failed to send invitation', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  // Post-interview: Shortlist or Reject
-  const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      apiRequest(`/api/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] });
-      if (variables.status === 'shortlisted') {
-        toast({ title: 'Candidate shortlisted', description: 'Approved for next round' });
-      } else if (variables.status === 'rejected') {
-        toast({ title: 'Candidate rejected' });
-      }
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Failed to update status', description: err.message, variant: 'destructive' });
-    },
-  });
+  const { data, isLoading, error } = useApplications({ page: 1 });
+  const approveInterviewMutation = useApproveInterview();
+  const updateStatusMutation = useUpdateApplication();
 
   const handleReject = (id: string) => updateStatusMutation.mutate({ id, status: 'rejected' });
   const openDetail = (id: string) => { setSelectedAppId(id); setSheetOpen(true); };
@@ -106,9 +49,7 @@ export default function Applications() {
     app.candidates ? `${app.candidates.first_name} ${app.candidates.last_name}` : 'Unknown';
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-  // Pre-interview statuses get "Approve for Interview" + "Reject"
   const canApproveForInterview = (status: string) => ['new', 'screening'].includes(status);
-  // Post-interview status gets "Shortlist" + "Reject"
   const canMakeFinalDecision = (status: string) => status === 'interviewed';
 
   if (isLoading) return <TableSkeleton cols={6} />;
@@ -135,7 +76,7 @@ export default function Applications() {
             return (
               <div key={status} className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-foreground">{statusLabels[status]}</h3>
+                  <h3 className="text-sm font-medium text-foreground">{APPLICATION_STATUS_LABELS[status]}</h3>
                   <Badge variant="secondary" className="text-xs">{filtered.length}</Badge>
                 </div>
                 <div className="space-y-2">
@@ -151,7 +92,6 @@ export default function Applications() {
                           <span className="text-xs text-muted-foreground">{formatDate(app.created_at)}</span>
                         </div>
 
-                        {/* Pre-interview: Approve for Interview */}
                         {canApproveForInterview(app.status) && getScore(app.ai_screening_score) !== null && (
                           <div className="flex gap-1 mt-2">
                             <Button size="sm" variant="outline" className="h-7 flex-1 text-xs text-accent hover:bg-accent/10 hover:text-accent border-accent/20" onClick={(e) => { e.stopPropagation(); approveInterviewMutation.mutate(app.id); }}>
@@ -163,7 +103,6 @@ export default function Applications() {
                           </div>
                         )}
 
-                        {/* Post-interview: Shortlist or Reject */}
                         {canMakeFinalDecision(app.status) && (
                           <div className="flex gap-1 mt-2">
                             <Button size="sm" variant="outline" className="h-7 flex-1 text-xs text-success hover:bg-success/10 hover:text-success border-success/20" onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ id: app.id, status: 'shortlisted' }); }}>
@@ -175,7 +114,6 @@ export default function Applications() {
                           </div>
                         )}
 
-                        {/* Shortlisted indicator */}
                         {app.status === 'shortlisted' && (
                           <div className="flex items-center gap-1 mt-2 text-xs text-success">
                             <CheckCircle className="h-3 w-3" /> Approved for next round
@@ -219,8 +157,8 @@ export default function Applications() {
                       </span>
                     </td>
                     <td className="p-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[app.status] || ''}`}>
-                        {statusLabels[app.status] || app.status}
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${APPLICATION_STATUS_COLORS[app.status] || ''}`}>
+                        {APPLICATION_STATUS_LABELS[app.status] || app.status}
                       </span>
                     </td>
                     <td className="p-3 text-sm text-muted-foreground">{formatDate(app.created_at)}</td>

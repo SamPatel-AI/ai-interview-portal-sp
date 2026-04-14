@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,30 +10,19 @@ import { Phone, PhoneIncoming, PhoneOutgoing, Search, Plus, Calendar, Loader2, C
 import { Badge } from '@/components/ui/badge';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
-import { useToast } from '@/hooks/use-toast';
 import CallDetailSheet from '@/components/organisms/calls/CallDetailSheet';
+import { useCalls, useInitiateCall, useScheduleCall } from '@/domains/calls';
+import { useApplications } from '@/domains/applications';
+import { CALL_STATUS_COLORS } from '@/lib/constants';
 
-interface Call {
-  id: string;
-  direction: string;
-  status: string;
-  duration_seconds: number | null;
-  scheduled_at: string | null;
-  started_at: string | null;
-  ended_at: string | null;
-  booking_source: string | null;
-  candidates?: { first_name: string; last_name: string };
-  applications?: { jobs?: { title: string } };
-  ai_agents?: { name: string } | null;
-}
-
-const statusConfig: Record<string, { color: string; label: string }> = {
-  completed: { color: 'bg-success/10 text-success', label: 'Completed' },
-  scheduled: { color: 'bg-info/10 text-info', label: 'Scheduled' },
-  in_progress: { color: 'bg-warning/10 text-warning', label: 'In Progress' },
-  failed: { color: 'bg-destructive/10 text-destructive', label: 'Failed' },
-  no_answer: { color: 'bg-muted text-muted-foreground', label: 'No Answer' },
-  voicemail: { color: 'bg-accent/10 text-accent', label: 'Voicemail' },
+const CALL_STATUS_LABELS: Record<string, string> = {
+  completed: 'Completed',
+  scheduled: 'Scheduled',
+  in_progress: 'In Progress',
+  failed: 'Failed',
+  no_answer: 'No Answer',
+  voicemail: 'Voicemail',
+  interrupted: 'Interrupted',
 };
 
 const formatDuration = (seconds: number | null) => {
@@ -53,31 +40,13 @@ export default function Calls() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [appId, setAppId] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['calls'],
-    queryFn: () => apiRequest<ApiResponse<Call[]>>('/api/calls?page=1&limit=50'),
-  });
+  const { data, isLoading, error } = useCalls();
+  const callNowMutation = useInitiateCall();
+  const scheduleMutation = useScheduleCall();
 
-  const { data: appsData } = useQuery({
-    queryKey: ['applications-for-calls'],
-    queryFn: () => apiRequest<ApiResponse<{ id: string; candidates?: { first_name: string; last_name: string }; jobs?: { title: string } }[]>>('/api/applications?page=1&limit=100'),
-    enabled: callNowOpen || scheduleOpen,
-  });
-
-  const callNowMutation = useMutation({
-    mutationFn: () => apiRequest('/api/calls/outbound', { method: 'POST', body: JSON.stringify({ application_id: appId }) }),
-    onSuccess: () => { toast({ title: 'Call initiated' }); queryClient.invalidateQueries({ queryKey: ['calls'] }); setCallNowOpen(false); setAppId(''); },
-    onError: (e: Error) => toast({ title: 'Call failed', description: e.message, variant: 'destructive' }),
-  });
-
-  const scheduleMutation = useMutation({
-    mutationFn: () => apiRequest('/api/calls/schedule', { method: 'POST', body: JSON.stringify({ application_id: appId, scheduled_at: scheduledAt }) }),
-    onSuccess: () => { toast({ title: 'Call scheduled' }); queryClient.invalidateQueries({ queryKey: ['calls'] }); setScheduleOpen(false); setAppId(''); setScheduledAt(''); },
-    onError: (e: Error) => toast({ title: 'Schedule failed', description: e.message, variant: 'destructive' }),
-  });
+  const { data: appsData } = useApplications({ page: 1 });
+  const apps = appsData?.data ?? [];
 
   const calls = data?.data ?? [];
   const filtered = search
@@ -88,9 +57,6 @@ export default function Calls() {
     : calls;
 
   const formatDate = (d: string | null) => d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
-  const apps = appsData?.data ?? [];
-
-  const handleRowClick = (id: string) => { setSelectedCallId(id); setSheetOpen(true); };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -129,7 +95,7 @@ export default function Calls() {
               </TableHeader>
               <TableBody>
                 {filtered.map((call) => (
-                  <TableRow key={call.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleRowClick(call.id)}>
+                  <TableRow key={call.id} className="cursor-pointer hover:bg-muted/50" onClick={() => { setSelectedCallId(call.id); setSheetOpen(true); }}>
                     <TableCell className="font-medium">
                       {call.candidates ? `${call.candidates.first_name} ${call.candidates.last_name}` : '—'}
                     </TableCell>
@@ -139,12 +105,12 @@ export default function Calls() {
                       {call.direction === 'outbound' ? <PhoneOutgoing className="h-4 w-4 text-primary" /> : <PhoneIncoming className="h-4 w-4 text-success" />}
                     </TableCell>
                     <TableCell>
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig[call.status]?.color ?? ''}`}>
-                        {statusConfig[call.status]?.label ?? call.status}
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CALL_STATUS_COLORS[call.status] ?? ''}`}>
+                        {CALL_STATUS_LABELS[call.status] ?? call.status}
                       </span>
                     </TableCell>
                     <TableCell>
-                      {call.booking_source === 'cal.com' ? (
+                      {(call as any).booking_source === 'cal.com' ? (
                         <Badge variant="outline" className="text-xs border-primary/20 text-primary bg-primary/5">
                           <Calendar className="h-3 w-3 mr-1" />Cal.com
                         </Badge>
@@ -164,7 +130,6 @@ export default function Calls() {
 
       <CallDetailSheet callId={selectedCallId} open={sheetOpen} onOpenChange={setSheetOpen} />
 
-      {/* Call Now Dialog */}
       <Dialog open={callNowOpen} onOpenChange={setCallNowOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Initiate Call</DialogTitle></DialogHeader>
@@ -182,14 +147,13 @@ export default function Calls() {
                 </SelectContent>
               </Select>
             </div>
-            <Button className="w-full" disabled={!appId || callNowMutation.isPending} onClick={() => callNowMutation.mutate()}>
+            <Button className="w-full" disabled={!appId || callNowMutation.isPending} onClick={() => callNowMutation.mutate(appId, { onSuccess: () => { setCallNowOpen(false); setAppId(''); } })}>
               {callNowMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Call Now
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Schedule Dialog */}
       <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Schedule Call</DialogTitle></DialogHeader>
@@ -211,7 +175,7 @@ export default function Calls() {
               <Label>Date & Time</Label>
               <Input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
             </div>
-            <Button className="w-full" disabled={!appId || !scheduledAt || scheduleMutation.isPending} onClick={() => scheduleMutation.mutate()}>
+            <Button className="w-full" disabled={!appId || !scheduledAt || scheduleMutation.isPending} onClick={() => scheduleMutation.mutate({ applicationId: appId, scheduledAt }, { onSuccess: () => { setScheduleOpen(false); setAppId(''); setScheduledAt(''); } })}>
               {scheduleMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Schedule
             </Button>
           </div>

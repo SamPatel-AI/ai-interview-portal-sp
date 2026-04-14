@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest, apiUpload, ApiResponse } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,23 +8,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Upload, Users } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import CandidateDetailSheet from '@/components/organisms/candidates/CandidateDetailSheet';
+import { useCandidates, useCreateCandidate, useUploadResume } from '@/domains/candidates';
+import type { CreateCandidateInput } from '@/domains/candidates';
 
-interface Candidate {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string;
-  source: string;
-  applications_count?: number;
-  created_at: string;
-}
-
-const sourceBadgeVariant = (source: string) => {
+const sourceBadgeVariant = (source: string | null) => {
   switch (source) {
     case 'CEIPAL': return 'default';
     case 'Email': return 'secondary';
@@ -46,38 +34,27 @@ export default function Candidates() {
   const [phone, setPhone] = useState('');
   const [source, setSource] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['candidates', page, search],
-    queryFn: () => apiRequest<ApiResponse<Candidate[]>>(`/api/candidates?page=${page}&limit=20&search=${search}`),
-  });
+  const { data, isLoading, error } = useCandidates({ page, search });
+  const createMutation = useCreateCandidate();
+  const uploadMutation = useUploadResume();
 
-  const createMutation = useMutation({
-    mutationFn: async (candidate: { first_name: string; last_name: string; email: string; phone: string; source: string }) => {
-      const result = await apiRequest<ApiResponse<Candidate>>('/api/candidates', {
-        method: 'POST', body: JSON.stringify(candidate),
-      });
-      if (resumeFile && result.data?.id) {
-        const formData = new FormData();
-        formData.append('resume', resumeFile);
-        await apiUpload(`/api/candidates/${result.data.id}/resume`, formData);
-      }
-      return result;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['candidates'] });
-      toast({ title: 'Candidate created successfully' });
-      setDialogOpen(false);
-      setFirstName(''); setLastName(''); setEmail(''); setPhone(''); setSource(''); setResumeFile(null);
-    },
-    onError: (err: Error) => toast({ title: 'Failed to create candidate', description: err.message, variant: 'destructive' }),
-  });
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const input: CreateCandidateInput = { first_name: firstName, last_name: lastName, email, phone, source };
+    createMutation.mutate(input, {
+      onSuccess: (result) => {
+        if (resumeFile && result?.data?.id) {
+          uploadMutation.mutate({ candidateId: result.data.id, file: resumeFile });
+        }
+        setDialogOpen(false);
+        setFirstName(''); setLastName(''); setEmail(''); setPhone(''); setSource(''); setResumeFile(null);
+      },
+    });
+  };
 
   const candidates = data?.data ?? [];
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-
   const openDetail = (id: string) => { setSelectedId(id); setSheetOpen(true); };
 
   return (
@@ -93,7 +70,7 @@ export default function Candidates() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader><DialogTitle>Add New Candidate</DialogTitle></DialogHeader>
-            <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate({ first_name: firstName, last_name: lastName, email, phone, source }); }} className="space-y-4 mt-4">
+            <form onSubmit={handleCreate} className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>First Name</Label><Input placeholder="John" value={firstName} onChange={e => setFirstName(e.target.value)} required /></div>
                 <div className="space-y-2"><Label>Last Name</Label><Input placeholder="Doe" value={lastName} onChange={e => setLastName(e.target.value)} required /></div>
@@ -153,7 +130,7 @@ export default function Candidates() {
                     <TableCell className="font-medium">{c.first_name} {c.last_name}</TableCell>
                     <TableCell className="text-muted-foreground">{c.email}</TableCell>
                     <TableCell className="text-muted-foreground">{c.phone}</TableCell>
-                    <TableCell><Badge variant={sourceBadgeVariant(c.source) as "default" | "secondary" | "outline"}>{c.source}</Badge></TableCell>
+                    <TableCell><Badge variant={sourceBadgeVariant(c.source) as "default" | "secondary" | "outline"}>{c.source || 'Unknown'}</Badge></TableCell>
                     <TableCell>{c.applications_count ?? 0}</TableCell>
                     <TableCell className="text-muted-foreground">{formatDate(c.created_at)}</TableCell>
                   </TableRow>

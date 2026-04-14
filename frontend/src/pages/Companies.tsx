@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,15 +7,7 @@ import { CardGridSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import CreateCompanyDialog from '@/components/organisms/companies/CreateCompanyDialog';
 import CompanyDetailSheet from '@/components/organisms/companies/CompanyDetailSheet';
-
-interface Company {
-  id: string;
-  name: string;
-  description: string | null;
-  logo_url: string | null;
-  jobs_count?: number;
-  agents_count?: number;
-}
+import { useCompanies } from '@/domains/companies';
 
 export default function Companies() {
   const [search, setSearch] = useState('');
@@ -25,11 +15,7 @@ export default function Companies() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['companies', search],
-    queryFn: () => apiRequest<ApiResponse<Company[]>>(`/api/companies?search=${search}`),
-  });
-
+  const { data, isLoading, error } = useCompanies({ search });
   const companies = data?.data ?? [];
 
   return (
@@ -64,10 +50,10 @@ export default function Companies() {
                 </div>
                 <div className="flex items-center gap-4 mt-4 pt-3 border-t">
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Briefcase className="h-3.5 w-3.5" />{company.jobs_count ?? 0} jobs
+                    <Briefcase className="h-3.5 w-3.5" />{(company as any).jobs_count ?? 0} jobs
                   </div>
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Bot className="h-3.5 w-3.5" />{company.agents_count ?? 0} agents
+                    <Bot className="h-3.5 w-3.5" />{(company as any).agents_count ?? 0} agents
                   </div>
                 </div>
               </CardContent>

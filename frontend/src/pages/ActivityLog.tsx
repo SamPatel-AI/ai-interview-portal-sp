@@ -1,42 +1,15 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ChevronLeft, ChevronRight, History, Filter } from 'lucide-react';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import EmptyState from '@/components/molecules/EmptyState';
-
-interface ActivityEntry {
-  id: string;
-  org_id: string;
-  user_id: string | null;
-  entity_type: string;
-  entity_id: string;
-  action: string;
-  details: Record<string, unknown>;
-  created_at: string;
-  users?: {
-    id: string;
-    full_name: string;
-    email: string;
-    avatar_url: string | null;
-  };
-}
-
-interface FilterOptions {
-  entity_types: string[];
-  actions: string[];
-  users: { id: string; full_name: string }[];
-}
+import { useActivity, useActivityFilters } from '@/domains/activity';
+import type { ActivityEntry } from '@/domains/activity';
 
 const entityColors: Record<string, string> = {
   application: 'bg-blue-500/10 text-blue-600',
@@ -49,13 +22,9 @@ const entityColors: Record<string, string> = {
 };
 
 const actionLabels: Record<string, string> = {
-  created: 'Created',
-  updated: 'Updated',
-  deleted: 'Deleted',
-  approved_for_interview: 'Approved for Interview',
-  screened: 'AI Screened',
-  invited: 'Invited',
-  status_changed: 'Status Changed',
+  created: 'Created', updated: 'Updated', deleted: 'Deleted',
+  approved_for_interview: 'Approved for Interview', screened: 'AI Screened',
+  invited: 'Invited', status_changed: 'Status Changed',
 };
 
 function formatAction(action: string): string {
@@ -79,25 +48,16 @@ export default function ActivityLog() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
-  const limit = 30;
 
-  const { data: filtersRes } = useQuery({
-    queryKey: ['activity-filters'],
-    queryFn: () => apiRequest<ApiResponse<FilterOptions>>('/api/activity/filters'),
-  });
+  const { data: filtersRes } = useActivityFilters();
+  const filters = filtersRes?.data as any;
 
-  const filters = (filtersRes as any)?.data as FilterOptions | undefined;
-
-  const { data: response, isLoading } = useQuery({
-    queryKey: ['activity', page, entityTypeFilter, userFilter, dateFrom, dateTo],
-    queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), limit: String(limit) });
-      if (entityTypeFilter !== 'all') params.set('entity_type', entityTypeFilter);
-      if (userFilter !== 'all') params.set('user_id', userFilter);
-      if (dateFrom) params.set('from', new Date(dateFrom).toISOString());
-      if (dateTo) params.set('to', new Date(dateTo + 'T23:59:59').toISOString());
-      return apiRequest<ApiResponse<ActivityEntry[]>>(`/api/activity?${params}`);
-    },
+  const { data: response, isLoading } = useActivity({
+    page,
+    entity_type: entityTypeFilter !== 'all' ? entityTypeFilter : undefined,
+    user_id: userFilter !== 'all' ? userFilter : undefined,
+    from: dateFrom ? new Date(dateFrom).toISOString() : undefined,
+    to: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : undefined,
   });
 
   const activities = (response as any)?.data || [];
@@ -106,61 +66,35 @@ export default function ActivityLog() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <Filter className="h-4 w-4 text-muted-foreground" />
         <Select value={entityTypeFilter} onValueChange={(v) => { setEntityTypeFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Entity Type" />
-          </SelectTrigger>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Entity Type" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Entities</SelectItem>
-            {(filters?.entity_types || []).map((t) => (
-              <SelectItem key={t} value={t}>
-                {t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-              </SelectItem>
+            {(filters?.entity_types || []).map((t: string) => (
+              <SelectItem key={t} value={t}>{t.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={userFilter} onValueChange={(v) => { setUserFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="User" />
-          </SelectTrigger>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="User" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Users</SelectItem>
-            {(filters?.users || []).map((u) => (
+            {(filters?.users || []).map((u: any) => (
               <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Input
-          type="date"
-          className="w-[150px]"
-          value={dateFrom}
-          onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-          placeholder="From"
-        />
-        <Input
-          type="date"
-          className="w-[150px]"
-          value={dateTo}
-          onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-          placeholder="To"
-        />
-        <div className="ml-auto text-sm text-muted-foreground">
-          {total} activit{total !== 1 ? 'ies' : 'y'}
-        </div>
+        <Input type="date" className="w-[150px]" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} placeholder="From" />
+        <Input type="date" className="w-[150px]" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} placeholder="To" />
+        <div className="ml-auto text-sm text-muted-foreground">{total} activit{total !== 1 ? 'ies' : 'y'}</div>
       </div>
 
-      {/* Table */}
       {isLoading ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">Loading activity...</CardContent></Card>
       ) : activities.length === 0 ? (
-        <EmptyState
-          icon={History}
-          title="No activity found"
-          description="Activity is recorded automatically as your team works. Try adjusting your filters."
-        />
+        <EmptyState icon={History} title="No activity found" description="Activity is recorded automatically as your team works. Try adjusting your filters." />
       ) : (
         <>
           <Card>
@@ -176,38 +110,25 @@ export default function ActivityLog() {
               </TableHeader>
               <TableBody>
                 {activities.map((entry: ActivityEntry) => {
-                  const initials = entry.users?.full_name
-                    ? entry.users.full_name.split(' ').map(n => n[0]).join('').toUpperCase()
-                    : '?';
+                  const u = (entry as any).users;
+                  const initials = u?.full_name ? u.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase() : '?';
                   return (
                     <TableRow key={entry.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="h-7 w-7">
-                            <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                              {initials}
-                            </AvatarFallback>
+                            <AvatarFallback className="text-xs bg-primary/10 text-primary">{initials}</AvatarFallback>
                           </Avatar>
-                          <span className="text-sm font-medium">
-                            {entry.users?.full_name || 'System'}
-                          </span>
+                          <span className="text-sm font-medium">{u?.full_name || 'System'}</span>
                         </div>
                       </TableCell>
+                      <TableCell><span className="font-medium text-sm">{formatAction(entry.action)}</span></TableCell>
                       <TableCell>
-                        <span className="font-medium text-sm">{formatAction(entry.action)}</span>
+                        <Badge variant="secondary" className={entityColors[entry.entity_type] || 'bg-muted text-muted-foreground'}>{entry.entity_type}</Badge>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={entityColors[entry.entity_type] || 'bg-muted text-muted-foreground'}>
-                          {entry.entity_type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[250px] truncate text-sm text-muted-foreground">
-                        {formatDetails(entry.details)}
-                      </TableCell>
+                      <TableCell className="max-w-[250px] truncate text-sm text-muted-foreground">{formatDetails(entry.details as Record<string, unknown>)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        {new Date(entry.created_at).toLocaleDateString('en-US', {
-                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                        })}
+                        {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </TableCell>
                     </TableRow>
                   );
@@ -216,12 +137,9 @@ export default function ActivityLog() {
             </Table>
           </Card>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
-              </p>
+              <p className="text-sm text-muted-foreground">Page {page} of {totalPages}</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
                   <ChevronLeft className="h-4 w-4 mr-1" /> Previous

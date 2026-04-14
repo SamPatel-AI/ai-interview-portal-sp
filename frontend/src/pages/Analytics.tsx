@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,74 +6,24 @@ import { Users, Phone, Star, TrendingUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { StatsSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
-
-interface AnalyticsOverview {
-  total_candidates: number;
-  total_calls: number;
-  avg_screening_score?: number;
-  hire_rate?: number;
-  calls_over_time?: { date: string; calls: number }[];
-  call_outcomes?: { name: string; value: number; color: string }[];
-  apps_by_status?: { status: string; count: number }[];
-}
-
-interface RecruiterStats {
-  total_applications: number;
-  completed_calls: number;
-  avg_call_duration: number;
-  evaluations: { decision: string; count: number }[];
-}
-
-interface Agent { id: string; name: string }
-
-interface AgentStats {
-  agent_name: string;
-  company_name: string;
-  total_calls: number;
-  completed_calls: number;
-  success_rate: number;
-  avg_duration_minutes: number;
-  sentiment_breakdown: Record<string, number>;
-  calls_by_status: { name: string; value: number }[];
-}
+import { useOverview, useRecruiterStats, useAgentStats } from '@/domains/analytics';
+import { useAgents } from '@/domains/agents';
+import { useAuthMe } from '@/domains/auth';
 
 export default function Analytics() {
   const [selectedAgentId, setSelectedAgentId] = useState('');
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['analytics-overview'],
-    queryFn: () => apiRequest<ApiResponse<AnalyticsOverview>>('/api/analytics/overview'),
-  });
-
-  const { data: meData } = useQuery({
-    queryKey: ['auth-me'],
-    queryFn: () => apiRequest<ApiResponse<{ id: string; full_name: string }>>('/api/auth/me'),
-    retry: false,
-  });
-
+  const { data, isLoading, error } = useOverview();
+  const { data: meData } = useAuthMe();
   const recruiterId = meData?.data?.id;
-
-  const { data: recruiterData } = useQuery({
-    queryKey: ['analytics-recruiter', recruiterId],
-    queryFn: () => apiRequest<ApiResponse<RecruiterStats>>(`/api/analytics/recruiter/${recruiterId}`),
-    enabled: !!recruiterId,
-  });
-
-  const { data: agentsData } = useQuery({
-    queryKey: ['agents-for-analytics'],
-    queryFn: () => apiRequest<ApiResponse<Agent[]>>('/api/agents?active_only=false'),
-  });
-
-  const { data: agentStatsData } = useQuery({
-    queryKey: ['analytics-agent', selectedAgentId],
-    queryFn: () => apiRequest<ApiResponse<AgentStats>>(`/api/analytics/agent/${selectedAgentId}`),
-    enabled: !!selectedAgentId,
-  });
+  const { data: recruiterData } = useRecruiterStats(recruiterId ?? null);
+  const { data: agentsData } = useAgents();
+  const { data: agentStatsData } = useAgentStats(selectedAgentId || null);
 
   if (isLoading) return <div className="space-y-6"><StatsSkeleton /></div>;
   if (error) return <EmptyState title="Failed to load analytics" description={error instanceof Error ? error.message : 'An error occurred'} />;
 
-  const overview = data?.data;
+  const overview = data?.data as any;
   const kpis = [
     { label: 'Total Candidates', value: overview?.total_candidates?.toLocaleString() ?? '0', icon: Users },
     { label: 'Total Calls', value: overview?.total_calls?.toLocaleString() ?? '0', icon: Phone },
@@ -86,8 +34,8 @@ export default function Analytics() {
   const callsOverTime = overview?.calls_over_time ?? [];
   const callOutcomes = overview?.call_outcomes ?? [];
   const appsByStatus = overview?.apps_by_status ?? [];
-  const rStats = recruiterData?.data;
-  const aStats = agentStatsData?.data;
+  const rStats = recruiterData?.data as any;
+  const aStats = agentStatsData?.data as any;
   const agents = agentsData?.data ?? [];
 
   return (
@@ -142,7 +90,7 @@ export default function Analytics() {
                     <ResponsiveContainer width="100%" height={250}>
                       <PieChart>
                         <Pie data={callOutcomes} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                          {callOutcomes.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                          {callOutcomes.map((entry: any, i: number) => <Cell key={i} fill={entry.color} />)}
                         </Pie>
                         <Tooltip />
                         <Legend />
@@ -250,7 +198,7 @@ export default function Analytics() {
                     <ResponsiveContainer width="100%" height={250}>
                       <PieChart>
                         <Pie data={aStats.calls_by_status} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                          {aStats.calls_by_status.map((_, i) => (
+                          {aStats.calls_by_status.map((_: any, i: number) => (
                             <Cell key={i} fill={['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--destructive))', 'hsl(var(--info))'][i % 5]} />
                           ))}
                         </Pie>
