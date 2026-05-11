@@ -195,6 +195,11 @@ router.post(
         const scheduledAt = new Date(now.getTime() + i * body.interval_minutes * 60 * 1000);
 
         try {
+          // Validate scheduling restrictions for each call
+          if (i > 0) {
+            await validateCallScheduling(scheduledAt.toISOString(), req.user!.org_id);
+          }
+
           const call = await initiateOutboundCall({
             applicationId: body.application_ids[i],
             orgId: req.user!.org_id,

@@ -14,6 +14,7 @@ interface ScreeningInput {
 interface ScreeningResult {
   candidate_strengths: string[];
   candidate_weaknesses: string[];
+  candidate_talking_points: string[];
   risk_factor: { score: string; explanation: string };
   reward_factor: { score: string; explanation: string };
   overall_fit_rating: number;
@@ -30,6 +31,7 @@ export async function screenResume(input: ScreeningInput): Promise<ScreeningResu
   const systemPrompt = `You are an expert technical recruiter. Analyze the candidate resume against the job description and return a JSON object with these exact keys:
 - candidate_strengths: string[] (top strengths matching job)
 - candidate_weaknesses: string[] (gaps or mismatches)
+- candidate_talking_points: string[] (2-3 brief observations from resume useful for building rapport during the interview, e.g., "Candidate has 3 years at Ford in embedded systems", "Recently relocated from Chicago to Detroit")
 - risk_factor: { score: "Low"|"Medium"|"High", explanation: string }
 - reward_factor: { score: "Low"|"Medium"|"High", explanation: string }
 - overall_fit_rating: number (0-10, integer)

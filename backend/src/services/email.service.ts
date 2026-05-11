@@ -1,6 +1,34 @@
+import nodemailer from 'nodemailer';
 import { supabaseAdmin } from '../config/database';
+import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { Candidate, EmailType } from '../types';
+
+// ─── SMTP Transporter (created lazily) ────────────────────
+
+let smtpTransporter: nodemailer.Transporter | null = null;
+
+function getTransporter(): nodemailer.Transporter | null {
+  if (env.EMAIL_TRANSPORT !== 'smtp') return null;
+  if (smtpTransporter) return smtpTransporter;
+
+  if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) {
+    logger.warn('SMTP configured but missing SMTP_HOST/USER/PASS — falling back to log');
+    return null;
+  }
+
+  smtpTransporter = nodemailer.createTransport({
+    host: env.SMTP_HOST,
+    port: parseInt(env.SMTP_PORT || '587', 10),
+    secure: parseInt(env.SMTP_PORT || '587', 10) === 465,
+    auth: {
+      user: env.SMTP_USER,
+      pass: env.SMTP_PASS,
+    },
+  });
+
+  return smtpTransporter;
+}
 
 // ─── Email Templates ───────────────────────────────────────
 
@@ -91,9 +119,28 @@ export async function sendEmail(params: {
   subject: string;
   body: string;
 }): Promise<void> {
-  // TODO: Integrate Microsoft Graph API for production
-  // For now, log the email and store in DB
   logger.info(`Sending ${params.type} email to ${params.toEmail}: ${params.subject}`);
+
+  let status: 'sent' | 'failed' = 'sent';
+
+  // Try SMTP delivery if configured
+  const transporter = getTransporter();
+  if (transporter) {
+    try {
+      await transporter.sendMail({
+        from: env.SMTP_FROM || env.SMTP_USER,
+        to: params.toEmail,
+        subject: params.subject,
+        html: params.body,
+      });
+      logger.info(`Email delivered via SMTP to ${params.toEmail}`);
+    } catch (err) {
+      logger.error(`SMTP delivery failed for ${params.toEmail}:`, err);
+      status = 'failed';
+    }
+  } else {
+    logger.info(`[LOG MODE] Would send ${params.type} email to ${params.toEmail}`);
+  }
 
   await supabaseAdmin.from('email_logs').insert({
     candidate_id: params.candidateId,
@@ -101,7 +148,7 @@ export async function sendEmail(params: {
     type: params.type,
     subject: params.subject,
     body: params.body,
-    status: 'sent',
+    status,
   });
 }
 
@@ -147,4 +194,77 @@ export async function sendRejectionEmail(
   });
 }
 
-export { invitationTemplate, rejectionTemplate, followUpTemplate };
+/**
+ * Send a follow-up email nudging a candidate who hasn't scheduled yet.
+ */
+export async function sendFollowUpEmail(
+  candidate: Pick<Candidate, 'id' | 'first_name' | 'last_name' | 'email'>,
+  jobTitle: string,
+  applicationId: string
+): Promise<void> {
+  const candidateName = `${candidate.first_name} ${candidate.last_name}`.trim();
+  const template = followUpTemplate(candidateName, jobTitle);
+
+  await sendEmail({
+    candidateId: candidate.id,
+    applicationId,
+    toEmail: candidate.email,
+    type: 'follow_up',
+    subject: template.subject,
+    body: template.body,
+  });
+}
+
+/**
+ * Send a re-engagement email to a past candidate for a new matching job.
+ */
+export async function sendReEngagementEmail(
+  candidate: Pick<Candidate, 'id' | 'first_name' | 'last_name' | 'email'>,
+  jobTitle: string,
+  jobDescription: string,
+  companyName: string
+): Promise<void> {
+  const candidateName = `${candidate.first_name} ${candidate.last_name}`.trim();
+  const template = reEngagementTemplate(candidateName, jobTitle, jobDescription, companyName);
+
+  await sendEmail({
+    candidateId: candidate.id,
+    toEmail: candidate.email,
+    type: 're_engagement',
+    subject: template.subject,
+    body: template.body,
+  });
+}
+
+function reEngagementTemplate(
+  candidateName: string,
+  jobTitle: string,
+  jobDescription: string,
+  companyName: string
+): { subject: string; body: string } {
+  const briefDescription = jobDescription.length > 200
+    ? jobDescription.substring(0, 200) + '...'
+    : jobDescription;
+
+  return {
+    subject: `New Opportunity: ${jobTitle} at ${companyName}`,
+    body: `<div style="font-family: Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #222;">
+  <p>Hello ${candidateName},</p>
+
+  <p>We hope this message finds you well. We have a new opening for <strong>${jobTitle}</strong> at <strong>${companyName}</strong> that matches your experience and skills.</p>
+
+  <p><strong>About the Role:</strong><br>${briefDescription}</p>
+
+  <p>If you're interested in learning more, we'd love to set up a quick screening conversation. Simply reply to this email to express your interest, and our team will reach out to you.</p>
+
+  <p>If you're not looking for new opportunities at this time, no worries — you can let us know and we won't contact you for future openings.</p>
+
+  <p>We look forward to hearing from you.</p>
+
+  <p>Best regards,<br>
+  <strong>Saanvi Technology Recruitment Team</strong></p>
+</div>`,
+  };
+}
+
+export { invitationTemplate, rejectionTemplate, followUpTemplate, reEngagementTemplate };

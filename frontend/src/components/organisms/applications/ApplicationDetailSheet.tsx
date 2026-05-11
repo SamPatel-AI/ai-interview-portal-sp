@@ -9,9 +9,12 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
   Loader2, Sparkles, CheckCircle, XCircle, AlertTriangle, Trophy,
   Mail, Phone, Volume2, MessageSquare, Star, Clock, FileText,
-  ArrowRight, ThumbsUp, ThumbsDown,
+  ArrowRight, ThumbsUp, ThumbsDown, UserCheck,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────
@@ -68,6 +71,7 @@ interface AppDetail {
   ai_screening_score: number | { score: number; explanation?: string } | null;
   ai_screening_result: ScreeningResult | null;
   recruiter_notes: string | null;
+  assigned_recruiter_id: string | null;
   created_at: string;
   candidates?: { first_name: string; last_name: string; email: string; phone?: string; resume_url?: string };
   jobs?: { title: string; client_companies?: { name: string } };
@@ -180,6 +184,24 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
       apiRequest(`/api/applications/${applicationId}`, { method: 'PATCH', body: JSON.stringify({ recruiter_notes: notes }) }),
     onSuccess: () => { toast({ title: 'Notes saved' }); invalidateAll(); setNotesEditing(false); },
     onError: (e: Error) => toast({ title: 'Failed to save notes', description: e.message, variant: 'destructive' }),
+  });
+
+  // Recruiter reassignment
+  const { data: recruitersData } = useQuery({
+    queryKey: ['team-recruiters'],
+    queryFn: () => apiRequest<ApiResponse<Array<{ id: string; full_name: string; role: string }>>>('/api/users'),
+    enabled: open,
+  });
+
+  const recruiters = ((recruitersData as any)?.data || []).filter(
+    (u: any) => u.role === 'admin' || u.role === 'recruiter'
+  );
+
+  const reassignMutation = useMutation({
+    mutationFn: (recruiterId: string) =>
+      apiRequest(`/api/applications/${applicationId}/assign`, { method: 'POST', body: JSON.stringify({ recruiter_id: recruiterId }) }),
+    onSuccess: () => { toast({ title: 'Recruiter reassigned' }); invalidateAll(); },
+    onError: (e: Error) => toast({ title: 'Reassignment failed', description: e.message, variant: 'destructive' }),
   });
 
   const app = data?.data;
@@ -529,6 +551,31 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
                           {call.duration_seconds ? <span className="text-muted-foreground">{formatDuration(call.duration_seconds)}</span> : null}
                         </div>
                       ))}
+                    </div>
+                  </>
+                )}
+
+                {/* ═══ SECTION 4.5: Recruiter Assignment ═══ */}
+                {recruiters.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                        <UserCheck className="h-3.5 w-3.5" /> Assigned Recruiter
+                      </h3>
+                      <Select
+                        value={app?.assigned_recruiter_id || ''}
+                        onValueChange={(v) => reassignMutation.mutate(v)}
+                      >
+                        <SelectTrigger className="w-full h-8 text-sm">
+                          <SelectValue placeholder="Unassigned" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {recruiters.map((r: any) => (
+                            <SelectItem key={r.id} value={r.id}>{r.full_name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </>
                 )}

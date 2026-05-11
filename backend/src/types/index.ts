@@ -19,7 +19,7 @@ export type CallStatus = 'scheduled' | 'in_progress' | 'completed' | 'no_answer'
 export type InterviewStyle = 'formal' | 'conversational' | 'technical';
 export type EvaluationDecision = 'advance' | 'reject' | 'callback' | 'hold';
 export type PhoneNumberType = 'inbound' | 'outbound' | 'both';
-export type EmailType = 'invitation' | 'follow_up' | 'rejection' | 'custom';
+export type EmailType = 'invitation' | 'follow_up' | 'rejection' | 're_engagement' | 'custom';
 export type EmailStatus = 'sent' | 'failed' | 'bounced';
 
 // Auth context attached to requests
@@ -222,4 +222,29 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
   message?: string;
+}
+
+// Re-engagement pipeline
+export interface ReengagementCampaign {
+  id: string;
+  org_id: string;
+  job_id: string;
+  status: 'pending' | 'matching' | 'emailing' | 'completed' | 'failed';
+  candidates_matched: number;
+  candidates_emailed: number;
+  candidates_responded: number;
+  config: Record<string, unknown>;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ReengagementCandidate {
+  id: string;
+  campaign_id: string;
+  candidate_id: string;
+  fit_score: number;
+  fit_justification: string | null;
+  email_sent: boolean;
+  responded: boolean;
+  created_at: string;
 }

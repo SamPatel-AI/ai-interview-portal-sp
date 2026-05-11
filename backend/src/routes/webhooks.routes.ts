@@ -2,6 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/database';
 import { webhookLimiter } from '../middleware/rateLimiter';
 import { logger } from '../utils/logger';
+import { phonesMatch } from '../utils/phone';
+import { scheduleCallRetry } from '../jobs/callRetry.job';
+import { buildInboundContext } from '../utils/retellPromptBuilder';
 
 const router = Router();
 
@@ -418,6 +421,41 @@ router.post('/retell/post-call', async (req: Request, res: Response, next: NextF
       })
       .eq('id', callRecord!.id);
 
+    // Track missed outbound calls for inbound callback detection
+    if (status === 'no_answer' || status === 'voicemail') {
+      await supabaseAdmin
+        .from('calls')
+        .update({ missed_call_detected_at: new Date().toISOString() })
+        .eq('id', callRecord!.id);
+    }
+
+    // Auto-retry interrupted calls (max depth of 2 retries)
+    if (status === 'interrupted') {
+      // Count how deep in the retry chain we are
+      let depth = 0;
+      let parentId = callRecord!.id;
+      while (parentId) {
+        const { data: parent } = await supabaseAdmin
+          .from('calls')
+          .select('parent_call_id')
+          .eq('id', parentId)
+          .single();
+        if (parent?.parent_call_id) {
+          depth++;
+          parentId = parent.parent_call_id;
+        } else {
+          break;
+        }
+      }
+
+      if (depth < 2) {
+        await scheduleCallRetry(callRecord!.id, callRecord!.org_id, 120000);
+        logger.info(`Auto-retry scheduled for interrupted call ${callRecord!.id} (depth: ${depth})`);
+      } else {
+        logger.info(`Skipping auto-retry for call ${callRecord!.id} — max retry depth reached (${depth})`);
+      }
+    }
+
     // Update application status based on call result
     if (status === 'completed') {
       await supabaseAdmin
@@ -498,19 +536,47 @@ router.post('/retell/inbound', async (req: Request, res: Response, _next: NextFu
       .eq('is_active', true)
       .single();
 
-    // Try to find the candidate by phone number
-    const cleanedPhone = fromNumber.replace(/\D/g, '').slice(-10);
-    const { data: candidate } = await supabaseAdmin
-      .from('candidates')
-      .select('id, org_id, first_name, last_name, email, phone')
-      .ilike('phone', `%${cleanedPhone}%`)
-      .limit(1)
-      .single();
+    // Find candidate by phone — robust matching using normalizeForLookup
+    const orgId = phoneConfig?.org_id;
+    let candidate: any = null;
+
+    if (orgId) {
+      // Fetch candidates with phone numbers for this org, match in JS for reliability
+      const { data: orgCandidates } = await supabaseAdmin
+        .from('candidates')
+        .select('id, org_id, first_name, last_name, email, phone')
+        .eq('org_id', orgId)
+        .not('phone', 'is', null);
+
+      const matches = (orgCandidates || []).filter(c => c.phone && phonesMatch(c.phone, fromNumber));
+
+      if (matches.length === 1) {
+        candidate = matches[0];
+      } else if (matches.length > 1) {
+        // Disambiguate: pick candidate with most recent active application
+        for (const m of matches) {
+          const { data: app } = await supabaseAdmin
+            .from('applications')
+            .select('id, created_at')
+            .eq('candidate_id', m.id)
+            .in('status', ['new', 'screening'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          if (app) {
+            candidate = m;
+            break;
+          }
+        }
+        // If none have active apps, just take the first match
+        if (!candidate) candidate = matches[0];
+      }
+    }
 
     const phoneAgent = (phoneConfig?.ai_agents as any[])?.[0];
 
     if (!candidate) {
-      // Unknown caller - use default agent or reject
+      // Unknown caller — use default agent or reject
       if (phoneAgent?.retell_agent_id) {
         res.json({
           agent_id: phoneAgent.retell_agent_id,
@@ -526,80 +592,107 @@ router.post('/retell/inbound', async (req: Request, res: Response, _next: NextFu
       return;
     }
 
-    // Find their most recent active application
-    const { data: application } = await supabaseAdmin
-      .from('applications')
-      .select(`
-        id, job_id, mandate_questions, interview_questions,
-        jobs (id, title, ai_agent_id, ai_agents (retell_agent_id))
-      `)
+    // Check for recent missed outbound call (callback within 2 hours)
+    const { data: missedCall } = await supabaseAdmin
+      .from('calls')
+      .select('id, application_id, ai_agent_id, transcript, context_passed')
       .eq('candidate_id', candidate.id)
-      .in('status', ['new', 'screening'])
+      .eq('direction', 'outbound')
+      .in('status', ['no_answer', 'voicemail'])
+      .gte('created_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
-    const appJobs = (application?.jobs as any[])?.[0];
-    const appAgent = (appJobs?.ai_agents as any[])?.[0];
-    const agentId = appAgent?.retell_agent_id
-      || phoneAgent?.retell_agent_id;
-
-    if (!agentId) {
-      res.status(404).json({ error: 'No agent available for this candidate' });
-      return;
-    }
-
     // Check for interrupted calls to resume
     const { data: interruptedCall } = await supabaseAdmin
       .from('calls')
-      .select('id, transcript, context_passed')
+      .select('id, application_id, ai_agent_id, transcript, context_passed')
       .eq('candidate_id', candidate.id)
       .eq('status', 'interrupted')
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
-    // Build dynamic variables
-    const dynamicVars: Record<string, string> = {
-      candidate_name: `${candidate.first_name} ${candidate.last_name}`.trim(),
-      candidate_first_name: candidate.first_name,
-      candidate_email: candidate.email,
-      job_title: appJobs?.title || 'the position',
-    };
+    // Determine which application/job/agent context to use
+    // Priority: missed call context > interrupted call context > latest active application
+    const contextSourceAppId = missedCall?.application_id
+      || interruptedCall?.application_id
+      || null;
 
-    if (application?.mandate_questions?.length) {
-      dynamicVars.mandate_questions = application.mandate_questions.join('\n');
-    }
-    if (application?.interview_questions?.length) {
-      dynamicVars.interview_questions = application.interview_questions.join('\n');
+    let application: any = null;
+    let job: any = null;
+    let agent: any = null;
+
+    if (contextSourceAppId) {
+      const { data: app } = await supabaseAdmin
+        .from('applications')
+        .select(`
+          id, job_id, mandate_questions, interview_questions, ai_screening_result,
+          jobs (id, title, description, skills, ai_agent_id,
+            ai_agents (id, retell_agent_id, interview_style, greeting_template, closing_template, evaluation_criteria, system_prompt))
+        `)
+        .eq('id', contextSourceAppId)
+        .single();
+      application = app;
+      job = (app?.jobs as any);
+      agent = (job?.ai_agents as any);
     }
 
-    // Add resumption context if there was an interrupted call
-    if (interruptedCall) {
-      dynamicVars.call_context = [
-        'IMPORTANT: This candidate is calling back after a previous interrupted call.',
-        'Previous conversation:',
-        interruptedCall.transcript || 'No transcript available',
-        '',
-        'Continue from where you left off. Acknowledge the reconnection.',
-      ].join('\n');
+    // Fallback: find most recent active application
+    if (!application) {
+      const { data: app } = await supabaseAdmin
+        .from('applications')
+        .select(`
+          id, job_id, mandate_questions, interview_questions, ai_screening_result,
+          jobs (id, title, description, skills, ai_agent_id,
+            ai_agents (id, retell_agent_id, interview_style, greeting_template, closing_template, evaluation_criteria, system_prompt))
+        `)
+        .eq('candidate_id', candidate.id)
+        .in('status', ['new', 'screening'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      application = app;
+      job = (app?.jobs as any);
+      agent = (job?.ai_agents as any);
     }
+
+    const agentId = agent?.retell_agent_id || phoneAgent?.retell_agent_id;
+
+    if (!agentId) {
+      res.status(404).json({ error: 'No agent available for this candidate' });
+      return;
+    }
+
+    // Build dynamic variables using the centralized prompt builder
+    const dynamicVars = buildInboundContext({
+      candidate,
+      application,
+      job,
+      agent,
+      missedCall: missedCall || undefined,
+      interruptedCall: interruptedCall || undefined,
+    });
 
     // Create inbound call record
+    const isResumption = !!(interruptedCall || missedCall);
+    const parentCallId = interruptedCall?.id || missedCall?.id || null;
+
     const { data: callRecord } = await supabaseAdmin
       .from('calls')
       .insert({
         org_id: candidate.org_id,
         application_id: application?.id || null,
         candidate_id: candidate.id,
-        ai_agent_id: phoneConfig?.assigned_agent_id || null,
+        ai_agent_id: agent?.id || phoneConfig?.assigned_agent_id || null,
         direction: 'inbound',
         status: 'in_progress',
         from_number: fromNumber,
         to_number: toNumber,
         started_at: new Date().toISOString(),
-        is_resumption: !!interruptedCall,
-        parent_call_id: interruptedCall?.id || null,
+        is_resumption: isResumption,
+        parent_call_id: parentCallId,
         context_passed: dynamicVars,
       })
       .select('id')
