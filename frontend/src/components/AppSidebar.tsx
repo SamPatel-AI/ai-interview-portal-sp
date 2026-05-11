@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Briefcase, ClipboardList, Bot, Phone,
-  Building2, Mail, BarChart3, History, Settings, LogOut, Brain,
+  Building2, Mail, Zap, BarChart3, History, Settings, LogOut, Brain,
 } from 'lucide-react';
 import { NavLink } from '@/components/atoms/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,6 +21,7 @@ const navItems = [
   { title: 'Calls', url: '/calls', icon: Phone },
   { title: 'Companies', url: '/companies', icon: Building2 },
   { title: 'Emails', url: '/emails', icon: Mail },
+  { title: 'Re-engagement', url: '/reengagement', icon: Zap },
   { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   { title: 'Activity Log', url: '/activity', icon: History },
   { title: 'Settings', url: '/settings', icon: Settings },
