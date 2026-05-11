@@ -8,15 +8,18 @@ export interface TeamMember {
   created_at: string;
 }
 
+export interface DayHours {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
+export type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
 export interface SchedulingConfig {
-  business_hours?: {
-    start: string;
-    end: string;
-    timezone: string;
-    days: number[];
-  };
-  blackout_dates?: string[];
-  custom_windows?: Array<{ start: string; end: string }>;
+  business_hours: Record<DayKey, DayHours>;
+  blackout_dates: string[];
+  timezone: string;
 }
 
 export interface InviteUserInput {
