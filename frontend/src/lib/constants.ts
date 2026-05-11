@@ -71,6 +71,14 @@ export const APPLICATION_STATUS_LABELS: Record<string, string> = {
   hired: 'Hired',
 };
 
+export const REENGAGEMENT_STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-muted text-muted-foreground',
+  matching: 'bg-blue-500/10 text-blue-600',
+  emailing: 'bg-amber-500/10 text-amber-600',
+  completed: 'bg-green-500/10 text-green-600',
+  failed: 'bg-destructive/10 text-destructive',
+};
+
 export const EMAIL_TYPE_LABELS: Record<string, string> = {
   invitation: 'Invitation',
   follow_up: 'Follow-up',

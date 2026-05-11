@@ -9,6 +9,7 @@ export const ROUTES = {
   CALLS: '/calls',
   COMPANIES: '/companies',
   EMAILS: '/emails',
+  REENGAGEMENT: '/reengagement',
   ANALYTICS: '/analytics',
   ACTIVITY: '/activity',
   SETTINGS: '/settings',
