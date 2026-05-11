@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,18 +12,16 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useToast } from '@/hooks/use-toast';
-import { UserPlus, Shield, ShieldCheck, Eye } from 'lucide-react';
-
-interface TeamMember {
-  id: string;
-  email: string;
-  full_name: string;
-  role: 'admin' | 'recruiter' | 'viewer';
-  avatar_url: string | null;
-  is_active: boolean;
-  created_at: string;
-}
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import { TableSkeleton } from '@/components/molecules/PageSkeleton';
+import EmptyState from '@/components/molecules/EmptyState';
+import { UserPlus, Shield, ShieldCheck, Eye, Users } from 'lucide-react';
+import {
+  useTeamMembers, useInviteUser, useUpdateUser, type TeamMember,
+} from '@/domains/settings';
+import { useAuthMe } from '@/domains/auth';
 
 const roleIcons: Record<string, React.ElementType> = {
   admin: ShieldCheck,
@@ -33,50 +29,47 @@ const roleIcons: Record<string, React.ElementType> = {
   viewer: Eye,
 };
 
-export default function TeamManagement({ currentUserId }: { currentUserId: string }) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ email: '', full_name: '', role: 'recruiter' as string });
+const roleChipClass: Record<string, string> = {
+  admin: 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30',
+  recruiter: 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30',
+  viewer: 'bg-muted text-muted-foreground border-border hover:bg-muted',
+};
 
-  const { data: response, isLoading } = useQuery({
-    queryKey: ['team-members'],
-    queryFn: () => apiRequest<ApiResponse<TeamMember[]>>('/api/users'),
-  });
+interface Props {
+  currentUserId: string;
+}
 
+export default function TeamManagement({ currentUserId }: Props) {
+  const { data: meRes } = useAuthMe();
+  const myRole = (meRes as any)?.data?.role as 'admin' | 'recruiter' | 'viewer' | undefined;
+  const isAdmin = myRole === 'admin';
+  const isViewer = myRole === 'viewer';
+
+  const { data: response, isLoading } = useTeamMembers();
   const members: TeamMember[] = (response as any)?.data || [];
 
-  const inviteMutation = useMutation({
-    mutationFn: (body: { email: string; full_name: string; role: string }) =>
-      apiRequest('/api/users/invite', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['team-members'] });
-      setInviteOpen(false);
-      setInviteForm({ email: '', full_name: '', role: 'recruiter' });
-      toast({ title: 'Invitation sent', description: 'Team member has been invited.' });
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Failed to invite', description: err.message, variant: 'destructive' });
-    },
+  const inviteMutation = useInviteUser();
+  const updateMutation = useUpdateUser();
+
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({
+    email: '', full_name: '', role: 'recruiter' as 'admin' | 'recruiter' | 'viewer',
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, ...body }: { id: string; role?: string; is_active?: boolean }) =>
-      apiRequest(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['team-members'] });
-      toast({ title: 'User updated' });
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Update failed', description: err.message, variant: 'destructive' });
-    },
-  });
+  const handleInvite = () => {
+    inviteMutation.mutate(inviteForm, {
+      onSuccess: () => {
+        setInviteOpen(false);
+        setInviteForm({ email: '', full_name: '', role: 'recruiter' });
+      },
+    });
+  };
 
   return (
-    <div className="space-y-4">
-      <Card className="shadow-card">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Team Members</CardTitle>
+    <Card className="shadow-card">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">Team Members</CardTitle>
+        {isAdmin && (
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
             <DialogTrigger asChild>
               <Button size="sm"><UserPlus className="h-4 w-4 mr-2" />Invite Member</Button>
@@ -105,10 +98,11 @@ export default function TeamManagement({ currentUserId }: { currentUserId: strin
                 </div>
                 <div className="space-y-2">
                   <Label>Role</Label>
-                  <Select value={inviteForm.role} onValueChange={(v) => setInviteForm({ ...inviteForm, role: v })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select
+                    value={inviteForm.role}
+                    onValueChange={(v) => setInviteForm({ ...inviteForm, role: v as typeof inviteForm.role })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="recruiter">Recruiter</SelectItem>
@@ -120,7 +114,7 @@ export default function TeamManagement({ currentUserId }: { currentUserId: strin
               <DialogFooter>
                 <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
                 <Button
-                  onClick={() => inviteMutation.mutate(inviteForm)}
+                  onClick={handleInvite}
                   disabled={!inviteForm.email || !inviteForm.full_name || inviteMutation.isPending}
                 >
                   {inviteMutation.isPending ? 'Sending...' : 'Send Invite'}
@@ -128,70 +122,98 @@ export default function TeamManagement({ currentUserId }: { currentUserId: strin
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Loading team...</p>
-          ) : (
-            <div className="space-y-3">
+        )}
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <TableSkeleton rows={4} cols={5} />
+        ) : members.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="No team members yet"
+            description={isAdmin ? 'Invite your first teammate to get started.' : 'Your organization has no team members.'}
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Member</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                {!isViewer && <TableHead className="text-right">Active</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {members.map((member) => {
                 const RoleIcon = roleIcons[member.role] || Eye;
-                const initials = member.full_name
-                  .split(' ')
-                  .map(n => n[0])
-                  .join('')
-                  .toUpperCase();
+                const initials = (member.full_name || member.email || '?')
+                  .split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
                 const isSelf = member.id === currentUserId;
+                const canEdit = isAdmin && !isSelf;
 
                 return (
-                  <div
-                    key={member.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg border ${!member.is_active ? 'opacity-50' : ''}`}
-                  >
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback className="bg-primary/10 text-primary text-sm">{initials}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-sm truncate">{member.full_name}</p>
-                        {isSelf && <Badge variant="outline" className="text-xs">You</Badge>}
+                  <TableRow key={member.id} className={!member.is_active ? 'opacity-60' : ''}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="bg-primary/10 text-primary text-xs">{initials}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{member.full_name}</span>
+                          {isSelf && <Badge variant="outline" className="text-xs">You</Badge>}
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">{member.email}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Select
-                        value={member.role}
-                        onValueChange={(v) => updateMutation.mutate({ id: member.id, role: v })}
-                        disabled={isSelf}
-                      >
-                        <SelectTrigger className="w-[130px] h-8">
-                          <div className="flex items-center gap-1.5">
-                            <RoleIcon className="h-3.5 w-3.5" />
-                            <SelectValue />
-                          </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="recruiter">Recruiter</SelectItem>
-                          <SelectItem value="viewer">Viewer</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Active</span>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{member.email}</TableCell>
+                    <TableCell>
+                      {canEdit ? (
+                        <Select
+                          value={member.role}
+                          onValueChange={(v) => updateMutation.mutate({ id: member.id, role: v })}
+                        >
+                          <SelectTrigger className="w-[140px] h-8">
+                            <div className="flex items-center gap-1.5">
+                              <RoleIcon className="h-3.5 w-3.5" />
+                              <SelectValue />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="recruiter">Recruiter</SelectItem>
+                            <SelectItem value="viewer">Viewer</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant="outline" className={`gap-1 capitalize ${roleChipClass[member.role]}`}>
+                          <RoleIcon className="h-3 w-3" />
+                          {member.role}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={member.is_active ? 'default' : 'secondary'}>
+                        {member.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                    {!isViewer && (
+                      <TableCell className="text-right">
                         <Switch
                           checked={member.is_active}
-                          onCheckedChange={(checked) => updateMutation.mutate({ id: member.id, is_active: checked })}
-                          disabled={isSelf}
+                          onCheckedChange={(checked) =>
+                            updateMutation.mutate({ id: member.id, is_active: checked })
+                          }
+                          disabled={!canEdit}
                         />
-                      </div>
-                    </div>
-                  </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
                 );
               })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
