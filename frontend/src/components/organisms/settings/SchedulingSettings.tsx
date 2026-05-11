@@ -1,202 +1,225 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
+import { useEffect, useMemo, useState } from 'react';
+import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { Clock, Plus, X } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Clock, CalendarIcon, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useSchedulingSettings, useUpdateSchedulingSettings } from '@/domains/settings';
+import type { SchedulingConfig, DayKey, DayHours } from '@/domains/settings';
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const TIMEZONES = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Detroit',
-  'UTC',
-  'Asia/Kolkata',
-  'Europe/London',
+const DAYS: { key: DayKey; label: string }[] = [
+  { key: 'monday', label: 'Monday' },
+  { key: 'tuesday', label: 'Tuesday' },
+  { key: 'wednesday', label: 'Wednesday' },
+  { key: 'thursday', label: 'Thursday' },
+  { key: 'friday', label: 'Friday' },
+  { key: 'saturday', label: 'Saturday' },
+  { key: 'sunday', label: 'Sunday' },
 ];
 
-interface SchedulingConfig {
-  business_hours?: {
-    start: string;
-    end: string;
-    timezone: string;
-    days: number[];
-  };
-  blackout_dates?: string[];
-}
+const TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern (New York)' },
+  { value: 'America/Chicago', label: 'Central (Chicago)' },
+  { value: 'America/Denver', label: 'Mountain (Denver)' },
+  { value: 'America/Los_Angeles', label: 'Pacific (Los Angeles)' },
+];
+
+// Generate 30-min increments from 06:00 to 22:00 inclusive
+const TIME_OPTIONS = (() => {
+  const out: { value: string; label: string }[] = [];
+  for (let h = 6; h <= 22; h++) {
+    for (const m of [0, 30]) {
+      if (h === 22 && m === 30) continue;
+      const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      const hour12 = ((h + 11) % 12) + 1;
+      const ampm = h < 12 ? 'AM' : 'PM';
+      const label = `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+      out.push({ value, label });
+    }
+  }
+  return out;
+})();
+
+const DEFAULT_DAY = (enabled: boolean): DayHours => ({ enabled, start: '09:00', end: '17:00' });
+
+const DEFAULT_CONFIG: SchedulingConfig = {
+  business_hours: {
+    monday: DEFAULT_DAY(true),
+    tuesday: DEFAULT_DAY(true),
+    wednesday: DEFAULT_DAY(true),
+    thursday: DEFAULT_DAY(true),
+    friday: DEFAULT_DAY(true),
+    saturday: DEFAULT_DAY(false),
+    sunday: DEFAULT_DAY(false),
+  },
+  blackout_dates: [],
+  timezone: 'America/New_York',
+};
 
 export default function SchedulingSettings() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { data: response, isLoading } = useSchedulingSettings();
+  const update = useUpdateSchedulingSettings();
 
-  const { data: response, isLoading } = useQuery({
-    queryKey: ['scheduling-config'],
-    queryFn: () => apiRequest<ApiResponse<SchedulingConfig>>('/api/settings/scheduling'),
-  });
+  const loaded: SchedulingConfig | null = useMemo(() => {
+    const d = (response as any)?.data;
+    if (!d) return null;
+    return {
+      business_hours: { ...DEFAULT_CONFIG.business_hours, ...(d.business_hours || {}) },
+      blackout_dates: d.blackout_dates || [],
+      timezone: d.timezone || 'America/New_York',
+    };
+  }, [response]);
 
-  const config: SchedulingConfig = (response as any)?.data || {};
+  const [form, setForm] = useState<SchedulingConfig>(DEFAULT_CONFIG);
 
-  const [form, setForm] = useState<SchedulingConfig | null>(null);
+  useEffect(() => {
+    if (loaded) setForm(loaded);
+  }, [loaded]);
 
-  // Initialize form from fetched config
-  const currentForm: SchedulingConfig = form ?? {
-    business_hours: config.business_hours ?? {
-      start: '09:00',
-      end: '17:00',
-      timezone: 'America/New_York',
-      days: [1, 2, 3, 4, 5],
-    },
-    blackout_dates: config.blackout_dates ?? [],
-  };
-
-  const [newBlackoutDate, setNewBlackoutDate] = useState('');
-
-  const saveMutation = useMutation({
-    mutationFn: (body: SchedulingConfig) =>
-      apiRequest('/api/settings/scheduling', { method: 'PATCH', body: JSON.stringify(body) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scheduling-config'] });
-      toast({ title: 'Scheduling settings saved' });
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Failed to save', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  const updateForm = (updates: Partial<SchedulingConfig>) => {
-    setForm({ ...currentForm, ...updates });
-  };
-
-  const toggleDay = (day: number) => {
-    const days = currentForm.business_hours?.days || [];
-    const updated = days.includes(day) ? days.filter(d => d !== day) : [...days, day].sort();
-    updateForm({
-      business_hours: { ...currentForm.business_hours!, days: updated },
+  const setDay = (key: DayKey, patch: Partial<DayHours>) => {
+    setForm({
+      ...form,
+      business_hours: {
+        ...form.business_hours,
+        [key]: { ...form.business_hours[key], ...patch },
+      },
     });
   };
 
-  const addBlackout = () => {
-    if (!newBlackoutDate) return;
-    const dates = currentForm.blackout_dates || [];
-    if (!dates.includes(newBlackoutDate)) {
-      updateForm({ blackout_dates: [...dates, newBlackoutDate].sort() });
-    }
-    setNewBlackoutDate('');
+  const addBlackout = (date: Date | undefined) => {
+    if (!date) return;
+    const iso = format(date, 'yyyy-MM-dd');
+    if (form.blackout_dates.includes(iso)) return;
+    setForm({ ...form, blackout_dates: [...form.blackout_dates, iso].sort() });
   };
 
-  const removeBlackout = (date: string) => {
-    updateForm({ blackout_dates: (currentForm.blackout_dates || []).filter(d => d !== date) });
+  const removeBlackout = (iso: string) => {
+    setForm({ ...form, blackout_dates: form.blackout_dates.filter((d) => d !== iso) });
   };
 
   if (isLoading) {
-    return <Card className="shadow-card"><CardContent className="p-8 text-center text-muted-foreground">Loading...</CardContent></Card>;
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
-      {/* Business Hours */}
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Clock className="h-4 w-4" /> Business Hours
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Start Time</Label>
-              <Input
-                type="time"
-                value={currentForm.business_hours?.start || '09:00'}
-                onChange={(e) => updateForm({
-                  business_hours: { ...currentForm.business_hours!, start: e.target.value },
-                })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>End Time</Label>
-              <Input
-                type="time"
-                value={currentForm.business_hours?.end || '17:00'}
-                onChange={(e) => updateForm({
-                  business_hours: { ...currentForm.business_hours!, end: e.target.value },
-                })}
-              />
-            </div>
-          </div>
+        <CardContent className="space-y-3">
+          {DAYS.map(({ key, label }) => {
+            const day = form.business_hours[key];
+            const disabled = !day.enabled;
+            return (
+              <div key={key} className="flex items-center gap-3 py-1">
+                <div className="flex items-center gap-3 w-40">
+                  <Switch
+                    checked={day.enabled}
+                    onCheckedChange={(v) => setDay(key, { enabled: v })}
+                  />
+                  <Label className={cn('font-medium', disabled && 'text-muted-foreground')}>{label}</Label>
+                </div>
+                <Select
+                  value={day.start}
+                  onValueChange={(v) => setDay(key, { start: v })}
+                  disabled={disabled}
+                >
+                  <SelectTrigger className={cn('w-[140px]', disabled && 'opacity-50')}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIME_OPTIONS.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className={cn('text-sm text-muted-foreground', disabled && 'opacity-50')}>to</span>
+                <Select
+                  value={day.end}
+                  onValueChange={(v) => setDay(key, { end: v })}
+                  disabled={disabled}
+                >
+                  <SelectTrigger className={cn('w-[140px]', disabled && 'opacity-50')}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIME_OPTIONS.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })}
 
-          <div className="space-y-2">
+          <div className="pt-4 space-y-2 border-t">
             <Label>Timezone</Label>
             <Select
-              value={currentForm.business_hours?.timezone || 'America/New_York'}
-              onValueChange={(v) => updateForm({
-                business_hours: { ...currentForm.business_hours!, timezone: v },
-              })}
+              value={form.timezone}
+              onValueChange={(v) => setForm({ ...form, timezone: v })}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[280px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                  <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-
-          <div className="space-y-2">
-            <Label>Allowed Days</Label>
-            <div className="flex gap-2">
-              {DAY_NAMES.map((name, idx) => (
-                <Button
-                  key={idx}
-                  variant={currentForm.business_hours?.days?.includes(idx) ? 'default' : 'outline'}
-                  size="sm"
-                  className="w-12"
-                  onClick={() => toggleDay(idx)}
-                >
-                  {name}
-                </Button>
-              ))}
-            </div>
-          </div>
         </CardContent>
       </Card>
 
-      {/* Blackout Dates */}
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="text-base">Blackout Dates</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">No interviews will be scheduled on these dates.</p>
-          <div className="flex gap-2">
-            <Input
-              type="date"
-              value={newBlackoutDate}
-              onChange={(e) => setNewBlackoutDate(e.target.value)}
-              className="w-[200px]"
-            />
-            <Button variant="outline" size="sm" onClick={addBlackout} disabled={!newBlackoutDate}>
-              <Plus className="h-4 w-4 mr-1" /> Add
-            </Button>
-          </div>
-          {(currentForm.blackout_dates || []).length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {(currentForm.blackout_dates || []).map((date) => (
-                <Badge key={date} variant="secondary" className="gap-1 pr-1">
-                  {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  <button onClick={() => removeBlackout(date)} className="ml-1 hover:text-destructive">
+          <p className="text-sm text-muted-foreground">No AI calls will be placed on these dates.</p>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm">
+                <CalendarIcon className="h-4 w-4 mr-2" /> Add blackout date
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                onSelect={addBlackout}
+                initialFocus
+                className={cn('p-3 pointer-events-auto')}
+              />
+            </PopoverContent>
+          </Popover>
+
+          {form.blackout_dates.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {form.blackout_dates.map((iso) => (
+                <Badge key={iso} variant="secondary" className="gap-1 pr-1">
+                  {new Date(iso + 'T00:00:00').toLocaleDateString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                  })}
+                  <button
+                    onClick={() => removeBlackout(iso)}
+                    className="ml-1 rounded p-0.5 hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Remove"
+                  >
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>
@@ -206,8 +229,8 @@ export default function SchedulingSettings() {
         </CardContent>
       </Card>
 
-      <Button onClick={() => saveMutation.mutate(currentForm)} disabled={saveMutation.isPending}>
-        {saveMutation.isPending ? 'Saving...' : 'Save Scheduling Settings'}
+      <Button onClick={() => update.mutate(form)} disabled={update.isPending}>
+        {update.isPending ? 'Saving…' : 'Save Scheduling Settings'}
       </Button>
     </div>
   );

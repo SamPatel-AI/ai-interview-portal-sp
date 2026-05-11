@@ -50,3 +50,7 @@ export function useUpdateSchedulingConfig() {
     onError: (err: Error) => { toast({ title: 'Failed to save', description: err.message, variant: 'destructive' }); },
   });
 }
+
+// Aliases matching the new naming convention
+export const useSchedulingSettings = useSchedulingConfig;
+export const useUpdateSchedulingSettings = useUpdateSchedulingConfig;
