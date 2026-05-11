@@ -17,6 +17,7 @@ import Agents from "@/pages/Agents";
 import Calls from "@/pages/Calls";
 import Companies from "@/pages/Companies";
 import Emails from "@/pages/Emails";
+import Reengagement from "@/pages/Reengagement";
 import Analytics from "@/pages/Analytics";
 import SettingsPage from "@/pages/Settings";
 import ActivityLog from "@/pages/ActivityLog";
@@ -52,6 +53,7 @@ const App = () => (
                 <Route path="/calls" element={<ErrorBoundary><Calls /></ErrorBoundary>} />
                 <Route path="/companies" element={<ErrorBoundary><Companies /></ErrorBoundary>} />
                 <Route path="/emails" element={<ErrorBoundary><Emails /></ErrorBoundary>} />
+                <Route path="/reengagement" element={<ErrorBoundary><Reengagement /></ErrorBoundary>} />
                 <Route path="/analytics" element={<ErrorBoundary><Analytics /></ErrorBoundary>} />
                 <Route path="/activity" element={<ErrorBoundary><ActivityLog /></ErrorBoundary>} />
                 <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
