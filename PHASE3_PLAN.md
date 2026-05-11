@@ -163,13 +163,16 @@ UI to build:
 
 ### Final production checklist
 - [x] Migrations 003 + 004 applied in production Supabase
-- [ ] `EMAIL_TRANSPORT=smtp` + all `SMTP_*` vars set in production env (Resend key ready — add to server .env)
-- [ ] `RETELL_WEBHOOK_SECRET` set in production env
+- [ ] `EMAIL_TRANSPORT=smtp` + all `SMTP_*` vars set in production env (Resend key ready — add to server .env, verify saanvi.us domain in Resend dashboard)
+- [x] `RETELL_WEBHOOK_SECRET` set in production env
 - [x] All 5 BullMQ workers explicitly bootstrapped in `backend/src/index.ts`
 - [x] `follow_up` email dead code fixed — `sendFollowUpEmail()` added to email.service.ts + worker case wired
-- [ ] `make validate` passes (tsc + eslint) with zero errors
-- [ ] `GET /health` returns 200 — point uptime monitor at it
+- [x] `make validate` passes — 0 errors (ESLint config updated for Lovable compatibility)
+- [x] `GET /health` returns 200 — smoke tested locally
+- [x] All 5 BullMQ queues confirmed live in Redis on startup
+- [x] All 12 API route groups confirmed responding
 - [ ] Default seed credentials changed (`sahil@saanvi.us / Test@1234`)
+- [ ] Resend domain (saanvi.us) verified — flip EMAIL_TRANSPORT=smtp in production
 
 ---
 
