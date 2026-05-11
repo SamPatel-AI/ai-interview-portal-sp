@@ -166,6 +166,16 @@ export default function Emails() {
                   <p className="text-sm text-muted-foreground mb-1">Subject</p>
                   <p className="font-medium">{selectedEmail.subject}</p>
                 </div>
+                {selectedEmail.status === 'failed' && (selectedEmail as any).error_message && (
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Error</p>
+                    <Card className="border-destructive/50">
+                      <CardContent className="p-3">
+                        <p className="text-sm text-destructive">{(selectedEmail as any).error_message}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">Body</p>
                   <Card>
