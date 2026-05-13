@@ -41,9 +41,15 @@ router.get('/campaigns', async (req: Request, res: Response, _next: NextFunction
 
     if (error) throw error;
 
+    const enriched = (campaigns ?? []).map((c: any) => ({
+      ...c,
+      job_title: c.jobs?.title ?? null,
+      jobs: undefined,
+    }));
+
     res.json({
       success: true,
-      data: campaigns,
+      data: enriched,
       total: count || 0,
       page,
       limit,
@@ -77,11 +83,23 @@ router.get('/campaigns/:id', async (req: Request, res: Response, _next: NextFunc
       .eq('campaign_id', campaign.id)
       .order('fit_score', { ascending: false });
 
+    const enrichedCandidates = (candidates ?? []).map((c: any) => ({
+      ...c,
+      candidate_name: c.candidates
+        ? `${c.candidates.first_name} ${c.candidates.last_name}`
+        : null,
+      candidates: undefined,
+    }));
+
     res.json({
       success: true,
       data: {
-        ...campaign,
-        candidates: candidates || [],
+        campaign: {
+          ...(campaign as any),
+          job_title: (campaign as any).jobs?.title ?? null,
+          jobs: undefined,
+        },
+        candidates: enrichedCandidates,
       },
     });
   } catch (err: any) {

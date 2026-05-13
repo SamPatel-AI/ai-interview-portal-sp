@@ -25,6 +25,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       recentActivityResult,
       scheduledCallsResult,
       topJobsResult,
+      screeningScoresResult,
     ] = await Promise.all([
       // Total candidates
       supabaseAdmin.from('candidates').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
@@ -42,13 +43,13 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
         .gte('created_at', new Date().toISOString().split('T')[0]),
-      // Pending reviews (completed calls without evaluations)
+      // Pending reviews: applications AI-screened but not yet actioned by recruiter
       supabaseAdmin
-        .from('calls')
+        .from('applications')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
-        .eq('status', 'completed')
-        .is('call_analysis', null),
+        .eq('status', 'screening')
+        .not('ai_screening_score', 'is', null),
       // Recent activity
       supabaseAdmin
         .from('activity_log')
@@ -70,6 +71,12 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
         .from('applications')
         .select('job_id, jobs (title)')
         .eq('org_id', orgId),
+      // AI screening scores for avg calculation
+      supabaseAdmin
+        .from('applications')
+        .select('ai_screening_score, status')
+        .eq('org_id', orgId)
+        .not('ai_screening_score', 'is', null),
     ]);
 
     // Build pipeline from application statuses
@@ -113,6 +120,20 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       .sort((a, b) => b.apps - a.apps)
       .slice(0, 5);
 
+    // Avg screening score
+    const rawScores = (screeningScoresResult.data ?? []).map((a: any) => {
+      const s = a.ai_screening_score;
+      return typeof s === 'number' ? s : typeof s?.score === 'number' ? s.score : null;
+    }).filter((s: number | null): s is number => s !== null);
+    const avg_screening_score = rawScores.length > 0
+      ? Math.round((rawScores.reduce((a: number, b: number) => a + b, 0) / rawScores.length) * 10) / 10
+      : null;
+
+    // Hire rate
+    const totalApps = (applicationsResult.data ?? []).length;
+    const hiredApps = (applicationsResult.data ?? []).filter((a: any) => a.status === 'hired').length;
+    const hire_rate = totalApps > 0 ? Math.round((hiredApps / totalApps) * 100) : null;
+
     res.json({
       success: true,
       data: {
@@ -121,6 +142,8 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
         total_calls: callsResult.count ?? 0,
         calls_today: callsTodayResult.count ?? 0,
         pending_reviews: pendingReviewResult.count ?? 0,
+        avg_screening_score,
+        hire_rate,
         pipeline,
         top_jobs,
         scheduled_calls,

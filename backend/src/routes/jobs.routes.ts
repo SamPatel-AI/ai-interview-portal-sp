@@ -58,7 +58,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         *,
         client_companies (id, name),
         ai_agents (id, name),
-        users!jobs_assigned_recruiter_id_fkey (id, full_name)
+        users!jobs_assigned_recruiter_id_fkey (id, full_name),
+        applications (count)
       `, { count: 'exact' })
       .eq('org_id', req.user!.org_id);
 
@@ -73,9 +74,15 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     if (error) throw new AppError(500, 'Failed to fetch jobs');
 
+    const enriched = (data ?? []).map((j: any) => ({
+      ...j,
+      applications_count: j.applications?.[0]?.count ?? 0,
+      applications: undefined,
+    }));
+
     res.json({
       success: true,
-      data,
+      data: enriched,
       total: count ?? 0,
       page,
       limit,
