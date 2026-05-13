@@ -15,6 +15,20 @@ const pipelineColors: Record<string, string> = {
   Hired: 'bg-success',
 };
 
+const ACTION_LABELS: Record<string, string> = {
+  ai_screening_complete: 'AI Screening Complete',
+  outbound_call_initiated: 'Outbound Call Initiated',
+  call_completed: 'Call Completed',
+  intake_received: 'Intake Received',
+  ceipal_sync: 'CEIPAL Sync',
+  approved_for_interview: 'Approved for Interview',
+  signup: 'Signup',
+};
+
+function formatAction(action: string): string {
+  return ACTION_LABELS[action] || action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function Dashboard() {
   const { data, isLoading, error } = useOverview();
 
@@ -40,7 +54,7 @@ export default function Dashboard() {
 
   const recentActivity = (overview.recent_activity ?? []).map((item: any) => ({
     user: item.users?.full_name || item.user || 'System',
-    action: `${item.action}${item.details?.candidate ? ` — ${item.details.candidate}` : ''}${item.details?.email ? ` (${item.details.email})` : ''}`,
+    action: `${formatAction(item.action)}${item.details?.candidate ? ` — ${item.details.candidate}` : ''}${item.details?.email ? ` (${item.details.email})` : ''}`,
     time: item.created_at ? new Date(item.created_at).toLocaleString() : '',
   }));
   const scheduledCalls = overview.scheduled_calls ?? [];
