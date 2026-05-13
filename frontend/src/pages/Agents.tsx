@@ -71,7 +71,7 @@ export default function Agents() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-4 pt-3 border-t">
-                  <span className="text-xs text-muted-foreground">{(agent as any).jobs_count ?? 0} jobs assigned</span>
+                  <span className="text-xs text-muted-foreground">{(agent as any).jobs_count ?? 0} {((agent as any).jobs_count ?? 0) === 1 ? 'job' : 'jobs'} assigned</span>
                   <Button variant="ghost" size="sm" className="text-xs" onClick={(e) => { e.stopPropagation(); openEdit(agent.id); }}>Configure →</Button>
                 </div>
               </CardContent>
