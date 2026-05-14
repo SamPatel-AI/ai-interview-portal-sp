@@ -19,8 +19,11 @@ export async function updateApplication(id: string, input: { status?: string; re
   return apiRequest<ApiResponse<Application>>(`/api/applications/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
 }
 
-export async function approveInterview(id: string) {
-  return apiRequest<ApiResponse<{ message: string }>>(`/api/applications/${id}/approve-interview`, { method: 'POST' });
+export async function approveInterview(id: string, deadline?: string) {
+  return apiRequest<ApiResponse<{ message: string }>>(`/api/applications/${id}/approve-interview`, {
+    method: 'POST',
+    body: deadline ? JSON.stringify({ deadline }) : undefined,
+  });
 }
 
 export async function screenApplication(id: string) {
