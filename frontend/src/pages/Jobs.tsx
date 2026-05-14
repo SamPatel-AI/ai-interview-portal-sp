@@ -3,10 +3,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Search, RefreshCw, Briefcase, Loader2 } from 'lucide-react';
+import { Search, RefreshCw, Briefcase, Loader2 } from 'lucide-react';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
-import CreateJobDialog from '@/components/organisms/jobs/CreateJobDialog';
 import JobDetailSheet from '@/components/organisms/jobs/JobDetailSheet';
 import { useJobs, useSyncCeipal } from '@/domains/jobs';
 import { JOB_STATUS_COLORS } from '@/lib/constants';
@@ -14,7 +13,6 @@ import { JOB_STATUS_COLORS } from '@/lib/constants';
 export default function Jobs() {
   const [search, setSearch] = useState('');
   const [page] = useState(1);
-  const [createOpen, setCreateOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 

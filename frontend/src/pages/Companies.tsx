@@ -1,17 +1,14 @@
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Building2, Briefcase, Bot } from 'lucide-react';
+import { Search, Building2, Briefcase, Bot } from 'lucide-react';
 import { CardGridSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
-import CreateCompanyDialog from '@/components/organisms/companies/CreateCompanyDialog';
 import CompanyDetailSheet from '@/components/organisms/companies/CompanyDetailSheet';
 import { useCompanies } from '@/domains/companies';
 
 export default function Companies() {
   const [search, setSearch] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
