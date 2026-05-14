@@ -141,6 +141,19 @@ export default function Applications() {
                       <CardContent className="p-3">
                         <p className="text-sm font-medium text-foreground">{candidateName(app)}</p>
                         <p className="text-xs text-muted-foreground mt-1">{app.jobs?.title ?? 'Unknown Job'}</p>
+                        {app.calls && app.calls.length > 0 && (
+                          <div className="mt-1">
+                            {(() => {
+                              const outcome = getAppCallOutcome(app);
+                              if (!outcome) return null;
+                              return (
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${outcome.color}`}>
+                                  <Phone className="h-3 w-3" />{outcome.label}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        )}
                         <div className="flex items-center justify-between mt-2">
                           <span className={`inline-flex items-center justify-center h-8 w-8 rounded-lg border text-sm font-bold ${scoreColor(getScore(app.ai_screening_score))} ${scoreBg(getScore(app.ai_screening_score))}`}>
                             {getScore(app.ai_screening_score) ?? '--'}
