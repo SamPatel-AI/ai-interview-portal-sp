@@ -71,47 +71,13 @@ interface Props {
 }
 
 export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [evalDecision, setEvalDecision] = useState<string>('');
-  const [evalRating, setEvalRating] = useState(0);
-  const [evalNotes, setEvalNotes] = useState('');
-
   const { data, isLoading } = useQuery({
     queryKey: ['call-detail', callId],
     queryFn: () => apiRequest<ApiResponse<CallDetail>>(`/api/calls/${callId}`),
     enabled: !!callId && open,
   });
 
-  const retryMutation = useMutation({
-    mutationFn: () => apiRequest(`/api/calls/${callId}/retry`, { method: 'POST' }),
-    onSuccess: () => {
-      toast({ title: 'Call retry initiated' });
-      queryClient.invalidateQueries({ queryKey: ['calls'] });
-    },
-    onError: (e: Error) => toast({ title: 'Retry failed', description: e.message, variant: 'destructive' }),
-  });
-
-  const evalMutation = useMutation({
-    mutationFn: (body: { application_id: string; decision: string; rating: number; notes: string }) =>
-      apiRequest(`/api/calls/${callId}/evaluate`, { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => {
-      toast({ title: 'Evaluation submitted' });
-      queryClient.invalidateQueries({ queryKey: ['call-detail', callId] });
-      queryClient.invalidateQueries({ queryKey: ['calls'] });
-      onOpenChange(false);
-    },
-    onError: (e: Error) => toast({ title: 'Evaluation failed', description: e.message, variant: 'destructive' }),
-  });
-
   const call = data?.data;
-
-  const changeSpeed = (rate: number) => {
-    setPlaybackRate(rate);
-    if (audioRef.current) audioRef.current.playbackRate = rate;
-  };
 
   const parseTranscript = (): { role: string; content: string }[] => {
     if (!call) return [];
