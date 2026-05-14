@@ -37,7 +37,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       .select(`
         *,
         candidates (id, first_name, last_name, email, phone),
-        jobs (id, title, client_company_id, status)
+        jobs (id, title, client_company_id, status, client_companies (id, name))
       `, { count: 'exact' })
       .eq('org_id', req.user!.org_id);
 
