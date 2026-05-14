@@ -1,14 +1,26 @@
 import { useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, List, CheckCircle, XCircle, Mail, ClipboardCheck, ThumbsUp, ThumbsDown, Phone } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { LayoutGrid, List, CheckCircle, XCircle, Mail, ClipboardCheck, ThumbsUp, ThumbsDown, Phone, CalendarIcon } from 'lucide-react';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import ApplicationDetailSheet from '@/components/organisms/applications/ApplicationDetailSheet';
 import { useApplications, useApproveInterview, useUpdateApplication } from '@/domains/applications';
 import type { Application } from '@/domains/applications';
 import { APPLICATION_STATUS_COLORS, APPLICATION_STATUS_LABELS } from '@/lib/constants';
+import { cn } from '@/lib/utils';
 
 const getScore = (score: Application['ai_screening_score']): number | null => {
   if (score === null || score === undefined) return null;
