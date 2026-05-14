@@ -1,16 +1,14 @@
-import { useState, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiResponse } from '@/lib/api';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useToast } from '@/hooks/use-toast';
 import {
-  Phone, PhoneIncoming, PhoneOutgoing, Star, RotateCcw, Loader2,
-  CheckCircle, XCircle, PhoneCall, Pause, MessageSquare, Volume2
+  PhoneIncoming, PhoneOutgoing, Star, Loader2,
+  MessageSquare, Volume2
 } from 'lucide-react';
 
 interface CallDetail {
@@ -73,47 +71,13 @@ interface Props {
 }
 
 export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [evalDecision, setEvalDecision] = useState<string>('');
-  const [evalRating, setEvalRating] = useState(0);
-  const [evalNotes, setEvalNotes] = useState('');
-
   const { data, isLoading } = useQuery({
     queryKey: ['call-detail', callId],
     queryFn: () => apiRequest<ApiResponse<CallDetail>>(`/api/calls/${callId}`),
     enabled: !!callId && open,
   });
 
-  const retryMutation = useMutation({
-    mutationFn: () => apiRequest(`/api/calls/${callId}/retry`, { method: 'POST' }),
-    onSuccess: () => {
-      toast({ title: 'Call retry initiated' });
-      queryClient.invalidateQueries({ queryKey: ['calls'] });
-    },
-    onError: (e: Error) => toast({ title: 'Retry failed', description: e.message, variant: 'destructive' }),
-  });
-
-  const evalMutation = useMutation({
-    mutationFn: (body: { application_id: string; decision: string; rating: number; notes: string }) =>
-      apiRequest(`/api/calls/${callId}/evaluate`, { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => {
-      toast({ title: 'Evaluation submitted' });
-      queryClient.invalidateQueries({ queryKey: ['call-detail', callId] });
-      queryClient.invalidateQueries({ queryKey: ['calls'] });
-      onOpenChange(false);
-    },
-    onError: (e: Error) => toast({ title: 'Evaluation failed', description: e.message, variant: 'destructive' }),
-  });
-
   const call = data?.data;
-
-  const changeSpeed = (rate: number) => {
-    setPlaybackRate(rate);
-    if (audioRef.current) audioRef.current.playbackRate = rate;
-  };
 
   const parseTranscript = (): { role: string; content: string }[] => {
     if (!call) return [];
@@ -151,35 +115,11 @@ export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
                 </span>
                 <span className="text-xs text-muted-foreground">{formatDuration(call.duration_seconds)}</span>
                 <span className="text-xs text-muted-foreground">{formatDate(call.started_at || call.scheduled_at)}</span>
-                {['interrupted', 'failed'].includes(call.status) && (
-                  <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
-                    <RotateCcw className="h-3 w-3 mr-1" />Retry
-                  </Button>
-                )}
               </div>
             </div>
 
             <ScrollArea className="flex-1 p-6">
               <div className="space-y-6">
-                {/* Audio */}
-                {call.recording_url && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-medium flex items-center gap-2"><Volume2 className="h-4 w-4" />Recording</h3>
-                      <div className="flex gap-1">
-                        {[1, 1.5, 2].map(r => (
-                          <Button key={r} size="sm" variant={playbackRate === r ? 'default' : 'outline'} className="h-6 px-2 text-xs" onClick={() => changeSpeed(r)}>
-                            {r}x
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                    <audio ref={audioRef} controls src={call.recording_url} className="w-full" />
-                  </div>
-                )}
-
-                <Separator />
-
                 {/* Transcript */}
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium flex items-center gap-2"><MessageSquare className="h-4 w-4" />Transcript</h3>
@@ -202,6 +142,20 @@ export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
                     )}
                   </div>
                 </div>
+
+                {/* Audio */}
+                {call.recording_url && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium flex items-center gap-2"><Volume2 className="h-4 w-4" />Recording</h3>
+                        <a href={call.recording_url} download className="text-xs text-primary hover:underline">Download</a>
+                      </div>
+                      <audio controls src={call.recording_url} className="w-full mt-2" />
+                    </div>
+                  </>
+                )}
 
                 {/* AI Analysis */}
                 {call.call_analysis && (
@@ -262,48 +216,7 @@ export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
                       </div>
                     ))
                   ) : (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-4 gap-2">
-                        {[
-                          { key: 'advance', label: 'Advance', icon: CheckCircle, cls: 'border-success/30 text-success hover:bg-success/10' },
-                          { key: 'reject', label: 'Reject', icon: XCircle, cls: 'border-destructive/30 text-destructive hover:bg-destructive/10' },
-                          { key: 'callback', label: 'Callback', icon: PhoneCall, cls: 'border-warning/30 text-warning hover:bg-warning/10' },
-                          { key: 'hold', label: 'Hold', icon: Pause, cls: 'border-muted-foreground/30 text-muted-foreground hover:bg-muted' },
-                        ].map(d => (
-                          <Button
-                            key={d.key}
-                            variant="outline"
-                            className={`flex-col h-16 gap-1 ${d.cls} ${evalDecision === d.key ? 'ring-2 ring-ring' : ''}`}
-                            onClick={() => setEvalDecision(d.key)}
-                          >
-                            <d.icon className="h-5 w-5" />
-                            <span className="text-xs">{d.label}</span>
-                          </Button>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-sm text-muted-foreground mr-2">Rating:</span>
-                        {[1,2,3,4,5].map(s => (
-                          <button key={s} onClick={() => setEvalRating(s)} className="focus:outline-none">
-                            <Star className={`h-6 w-6 transition-colors ${s <= evalRating ? 'text-warning fill-warning' : 'text-muted-foreground hover:text-warning/50'}`} />
-                          </button>
-                        ))}
-                      </div>
-                      <Textarea placeholder="Notes..." value={evalNotes} onChange={e => setEvalNotes(e.target.value)} rows={3} />
-                      <Button
-                        className="w-full"
-                        disabled={!evalDecision || evalRating === 0 || evalMutation.isPending}
-                        onClick={() => evalMutation.mutate({
-                          application_id: call.applications?.id ?? '',
-                          decision: evalDecision,
-                          rating: evalRating,
-                          notes: evalNotes,
-                        })}
-                      >
-                        {evalMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                        Submit Evaluation
-                      </Button>
-                    </div>
+                    <p className="text-sm text-muted-foreground">No evaluation recorded yet. Application decisions are managed from the Applications tab.</p>
                   )}
                 </div>
 

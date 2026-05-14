@@ -13,7 +13,6 @@ import EmptyState from '@/components/molecules/EmptyState';
 import CallDetailSheet from '@/components/organisms/calls/CallDetailSheet';
 import { useCalls, useInitiateCall, useScheduleCall } from '@/domains/calls';
 import { useApplications } from '@/domains/applications';
-import { CALL_STATUS_COLORS } from '@/lib/constants';
 
 const CALL_STATUS_LABELS: Record<string, string> = {
   completed: 'Completed',
@@ -24,6 +23,18 @@ const CALL_STATUS_LABELS: Record<string, string> = {
   voicemail: 'Voicemail',
   interrupted: 'Interrupted',
 };
+
+function getCallOutcome(call: { status: string; disconnection_reason: string | null }) {
+  const reason = call.disconnection_reason;
+  if (reason === 'dial_no_answer') return { label: 'No Answer', color: 'bg-yellow-500/10 text-yellow-600' };
+  if (reason === 'voicemail_reached') return { label: 'Voicemail', color: 'bg-yellow-500/10 text-yellow-600' };
+  if (reason === 'user_hangup') return { label: 'Candidate Ended', color: 'bg-blue-500/10 text-blue-600' };
+  if (reason === 'agent_hangup') return { label: 'Completed', color: 'bg-green-500/10 text-green-600' };
+  if (reason === 'dial_failed' || reason === 'dial_busy' || reason === 'error_inactivity') return { label: 'Failed', color: 'bg-destructive/10 text-destructive' };
+  if (call.status === 'scheduled') return { label: 'Scheduled', color: 'bg-blue-500/10 text-blue-600' };
+  if (call.status === 'in_progress') return { label: 'In Progress', color: 'bg-purple-500/10 text-purple-600' };
+  return { label: call.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), color: 'bg-muted text-muted-foreground' };
+}
 
 const formatDuration = (seconds: number | null) => {
   if (!seconds) return '—';
@@ -105,9 +116,14 @@ export default function Calls() {
                       {call.direction === 'outbound' ? <PhoneOutgoing className="h-4 w-4 text-primary" /> : <PhoneIncoming className="h-4 w-4 text-success" />}
                     </TableCell>
                     <TableCell>
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CALL_STATUS_COLORS[call.status] ?? ''}`}>
-                        {CALL_STATUS_LABELS[call.status] ?? call.status}
-                      </span>
+                      {(() => {
+                        const outcome = getCallOutcome(call);
+                        return (
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${outcome.color}`}>
+                            {outcome.label}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {(call as any).booking_source === 'cal.com' ? (
