@@ -14,6 +14,7 @@ export interface Application {
   updated_at: string;
   candidates?: { id: string; first_name: string; last_name: string; email: string; phone?: string };
   jobs?: { id: string; title: string; client_company_id?: string; status: string; client_companies?: { id: string; name: string } };
+  calls?: { id: string; status: string; disconnection_reason: string | null; started_at: string | null }[];
 }
 
 export interface CreateApplicationInput {
