@@ -32,6 +32,22 @@ const scoreBg = (score: number | null) => {
   return 'bg-destructive/10 border-destructive/20';
 };
 
+function getAppCallOutcome(app: Application) {
+  if (!app.calls || app.calls.length === 0) return null;
+  const latest = [...app.calls].sort((a, b) =>
+    new Date(b.started_at || 0).getTime() - new Date(a.started_at || 0).getTime()
+  )[0];
+  const reason = latest.disconnection_reason;
+  if (reason === 'dial_no_answer') return { label: 'No Answer', color: 'bg-yellow-500/10 text-yellow-600' };
+  if (reason === 'voicemail_reached') return { label: 'Voicemail', color: 'bg-yellow-500/10 text-yellow-600' };
+  if (reason === 'user_hangup') return { label: 'Candidate Ended', color: 'bg-blue-500/10 text-blue-600' };
+  if (reason === 'agent_hangup') return { label: 'Completed', color: 'bg-green-500/10 text-green-600' };
+  if (reason === 'dial_failed' || reason === 'dial_busy' || reason === 'error_inactivity') return { label: 'Failed', color: 'bg-destructive/10 text-destructive' };
+  if (latest.status === 'scheduled') return { label: 'Scheduled', color: 'bg-blue-500/10 text-blue-600' };
+  if (latest.status === 'in_progress') return { label: 'In Progress', color: 'bg-purple-500/10 text-purple-600' };
+  return { label: latest.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), color: 'bg-muted text-muted-foreground' };
+}
+
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
