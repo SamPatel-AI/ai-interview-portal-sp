@@ -34,7 +34,6 @@ export default function Jobs() {
             {syncMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Sync from CEIPAL
           </Button>
-          <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Job</Button>
         </div>
       </div>
 
@@ -43,7 +42,7 @@ export default function Jobs() {
       ) : error ? (
         <EmptyState icon={Briefcase} title="Failed to load jobs" description={error instanceof Error ? error.message : 'An error occurred'} />
       ) : jobs.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No jobs yet" description="Create your first job posting or sync from CEIPAL." actionLabel="Add Job" onAction={() => setCreateOpen(true)} />
+        <EmptyState icon={Briefcase} title="No jobs yet" description="Sync from CEIPAL to load your first jobs." />
       ) : (
         <Card className="shadow-card">
           <CardContent className="p-0">
@@ -81,7 +80,6 @@ export default function Jobs() {
         </Card>
       )}
 
-      <CreateJobDialog open={createOpen} onOpenChange={setCreateOpen} />
       <JobDetailSheet jobId={selectedJobId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
   );
