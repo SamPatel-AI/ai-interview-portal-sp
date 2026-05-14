@@ -25,6 +25,18 @@ const CALL_STATUS_LABELS: Record<string, string> = {
   interrupted: 'Interrupted',
 };
 
+function getCallOutcome(call: { status: string; disconnection_reason: string | null }) {
+  const reason = call.disconnection_reason;
+  if (reason === 'dial_no_answer') return { label: 'No Answer', color: 'bg-yellow-500/10 text-yellow-600' };
+  if (reason === 'voicemail_reached') return { label: 'Voicemail', color: 'bg-yellow-500/10 text-yellow-600' };
+  if (reason === 'user_hangup') return { label: 'Candidate Ended', color: 'bg-blue-500/10 text-blue-600' };
+  if (reason === 'agent_hangup') return { label: 'Completed', color: 'bg-green-500/10 text-green-600' };
+  if (reason === 'dial_failed' || reason === 'dial_busy' || reason === 'error_inactivity') return { label: 'Failed', color: 'bg-destructive/10 text-destructive' };
+  if (call.status === 'scheduled') return { label: 'Scheduled', color: 'bg-blue-500/10 text-blue-600' };
+  if (call.status === 'in_progress') return { label: 'In Progress', color: 'bg-purple-500/10 text-purple-600' };
+  return { label: call.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), color: 'bg-muted text-muted-foreground' };
+}
+
 const formatDuration = (seconds: number | null) => {
   if (!seconds) return '—';
   const m = Math.floor(seconds / 60);
