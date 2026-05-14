@@ -1,16 +1,14 @@
 import { useState, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiResponse } from '@/lib/api';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useToast } from '@/hooks/use-toast';
 import {
-  Phone, PhoneIncoming, PhoneOutgoing, Star, RotateCcw, Loader2,
-  CheckCircle, XCircle, PhoneCall, Pause, MessageSquare, Volume2
+  Phone, PhoneIncoming, PhoneOutgoing, Star, Loader2,
+  MessageSquare, Volume2
 } from 'lucide-react';
 
 interface CallDetail {
