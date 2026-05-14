@@ -3,10 +3,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Search, RefreshCw, Briefcase, Loader2 } from 'lucide-react';
+import { Search, RefreshCw, Briefcase, Loader2 } from 'lucide-react';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
-import CreateJobDialog from '@/components/organisms/jobs/CreateJobDialog';
 import JobDetailSheet from '@/components/organisms/jobs/JobDetailSheet';
 import { useJobs, useSyncCeipal } from '@/domains/jobs';
 import { JOB_STATUS_COLORS } from '@/lib/constants';
@@ -14,7 +13,6 @@ import { JOB_STATUS_COLORS } from '@/lib/constants';
 export default function Jobs() {
   const [search, setSearch] = useState('');
   const [page] = useState(1);
-  const [createOpen, setCreateOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -36,7 +34,6 @@ export default function Jobs() {
             {syncMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Sync from CEIPAL
           </Button>
-          <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Job</Button>
         </div>
       </div>
 
@@ -45,7 +42,7 @@ export default function Jobs() {
       ) : error ? (
         <EmptyState icon={Briefcase} title="Failed to load jobs" description={error instanceof Error ? error.message : 'An error occurred'} />
       ) : jobs.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No jobs yet" description="Create your first job posting or sync from CEIPAL." actionLabel="Add Job" onAction={() => setCreateOpen(true)} />
+        <EmptyState icon={Briefcase} title="No jobs yet" description="Sync from CEIPAL to load your first jobs." />
       ) : (
         <Card className="shadow-card">
           <CardContent className="p-0">
@@ -83,7 +80,6 @@ export default function Jobs() {
         </Card>
       )}
 
-      <CreateJobDialog open={createOpen} onOpenChange={setCreateOpen} />
       <JobDetailSheet jobId={selectedJobId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
   );
