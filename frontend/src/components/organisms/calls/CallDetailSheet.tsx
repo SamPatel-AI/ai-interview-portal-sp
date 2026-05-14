@@ -156,25 +156,6 @@ export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
 
             <ScrollArea className="flex-1 p-6">
               <div className="space-y-6">
-                {/* Audio */}
-                {call.recording_url && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-medium flex items-center gap-2"><Volume2 className="h-4 w-4" />Recording</h3>
-                      <div className="flex gap-1">
-                        {[1, 1.5, 2].map(r => (
-                          <Button key={r} size="sm" variant={playbackRate === r ? 'default' : 'outline'} className="h-6 px-2 text-xs" onClick={() => changeSpeed(r)}>
-                            {r}x
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                    <audio ref={audioRef} controls src={call.recording_url} className="w-full" />
-                  </div>
-                )}
-
-                <Separator />
-
                 {/* Transcript */}
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium flex items-center gap-2"><MessageSquare className="h-4 w-4" />Transcript</h3>
