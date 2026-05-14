@@ -45,7 +45,7 @@ export function useApproveInterview() {
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
-    mutationFn: (id: string) => service.approveInterview(id),
+    mutationFn: ({ id, deadline }: { id: string; deadline?: string }) => service.approveInterview(id, deadline),
     onSuccess: () => { qc.invalidateQueries({ queryKey: applicationKeys.all }); toast({ title: 'Invitation sent' }); },
     onError: (err: Error) => { toast({ title: 'Failed to send invitation', description: err.message, variant: 'destructive' }); },
   });

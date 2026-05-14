@@ -1,14 +1,26 @@
 import { useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, List, CheckCircle, XCircle, Mail, ClipboardCheck, ThumbsUp, ThumbsDown, Phone } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { LayoutGrid, List, CheckCircle, XCircle, Mail, ClipboardCheck, ThumbsUp, ThumbsDown, Phone, CalendarIcon } from 'lucide-react';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import ApplicationDetailSheet from '@/components/organisms/applications/ApplicationDetailSheet';
 import { useApplications, useApproveInterview, useUpdateApplication } from '@/domains/applications';
 import type { Application } from '@/domains/applications';
 import { APPLICATION_STATUS_COLORS, APPLICATION_STATUS_LABELS } from '@/lib/constants';
+import { cn } from '@/lib/utils';
 
 const getScore = (score: Application['ai_screening_score']): number | null => {
   if (score === null || score === undefined) return null;
@@ -53,6 +65,11 @@ export default function Applications() {
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [pendingAppId, setPendingAppId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  );
 
   const { data, isLoading, error } = useApplications({ page: 1 });
   const approveInterviewMutation = useApproveInterview();
@@ -60,6 +77,28 @@ export default function Applications() {
 
   const handleReject = (id: string) => updateStatusMutation.mutate({ id, status: 'rejected' });
   const openDetail = (id: string) => { setSelectedAppId(id); setSheetOpen(true); };
+
+  const openInviteDialog = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPendingAppId(id);
+    setSelectedDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+    setDialogOpen(true);
+  };
+
+  const handleConfirmInvite = () => {
+    if (!pendingAppId) return;
+    approveInterviewMutation.mutate({
+      id: pendingAppId,
+      deadline: selectedDate?.toISOString(),
+    });
+    setDialogOpen(false);
+    setPendingAppId(null);
+  };
+
+  const handleCancelInvite = () => {
+    setDialogOpen(false);
+    setPendingAppId(null);
+  };
 
   const allApps = [...(data?.data ?? [])].sort((a, b) => (getScore(b.ai_screening_score) ?? 0) - (getScore(a.ai_screening_score) ?? 0));
 
@@ -163,7 +202,7 @@ export default function Applications() {
 
                         {canApproveForInterview(app.status) && getScore(app.ai_screening_score) !== null && (
                           <div className="flex gap-1 mt-2">
-                            <Button size="sm" variant="outline" className="h-7 flex-1 text-xs text-accent hover:bg-accent/10 hover:text-accent border-accent/20" onClick={(e) => { e.stopPropagation(); approveInterviewMutation.mutate(app.id); }}>
+                            <Button size="sm" variant="outline" className="h-7 flex-1 text-xs text-accent hover:bg-accent/10 hover:text-accent border-accent/20" onClick={(e) => openInviteDialog(app.id, e)}>
                               <Mail className="h-3 w-3 mr-1" />Send Invite
                             </Button>
                             <Button size="sm" variant="outline" className="h-7 flex-1 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20" onClick={(e) => { e.stopPropagation(); handleReject(app.id); }}>
@@ -234,7 +273,7 @@ export default function Applications() {
                     <td className="p-3">
                       {canApproveForInterview(app.status) && getScore(app.ai_screening_score) !== null ? (
                         <div className="flex items-center justify-center gap-1">
-                          <Button size="sm" variant="outline" className="h-8 text-xs text-accent hover:bg-accent/10 hover:text-accent border-accent/20" onClick={(e) => { e.stopPropagation(); approveInterviewMutation.mutate(app.id); }}>
+                          <Button size="sm" variant="outline" className="h-8 text-xs text-accent hover:bg-accent/10 hover:text-accent border-accent/20" onClick={(e) => openInviteDialog(app.id, e)}>
                             <Mail className="h-3.5 w-3.5 mr-1" />Send Invite
                           </Button>
                           <Button size="sm" variant="outline" className="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20" onClick={(e) => { e.stopPropagation(); handleReject(app.id); }}>
@@ -261,6 +300,50 @@ export default function Applications() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Interview Deadline</DialogTitle>
+            <DialogDescription>
+              Select the last date by which the candidate must book their screening call. The Cal.com booking link will only show slots up to this date.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <label className="text-sm font-medium">Book by</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    'w-full justify-start text-left font-normal',
+                    !selectedDate && 'text-muted-foreground'
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {selectedDate ? format(selectedDate, 'PPP') : <span>Pick a date</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={setSelectedDate}
+                  disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                  initialFocus
+                  className={cn('p-3 pointer-events-auto')}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelInvite}>Cancel</Button>
+            <Button onClick={handleConfirmInvite} disabled={approveInterviewMutation.isPending}>
+              {approveInterviewMutation.isPending ? 'Sending…' : 'Send Invitation'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ApplicationDetailSheet applicationId={selectedAppId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
