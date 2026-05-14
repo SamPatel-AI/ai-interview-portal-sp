@@ -151,11 +151,6 @@ export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
                 </span>
                 <span className="text-xs text-muted-foreground">{formatDuration(call.duration_seconds)}</span>
                 <span className="text-xs text-muted-foreground">{formatDate(call.started_at || call.scheduled_at)}</span>
-                {['interrupted', 'failed'].includes(call.status) && (
-                  <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
-                    <RotateCcw className="h-3 w-3 mr-1" />Retry
-                  </Button>
-                )}
               </div>
             </div>
 
