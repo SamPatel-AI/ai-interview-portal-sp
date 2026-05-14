@@ -252,48 +252,7 @@ export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
                       </div>
                     ))
                   ) : (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-4 gap-2">
-                        {[
-                          { key: 'advance', label: 'Advance', icon: CheckCircle, cls: 'border-success/30 text-success hover:bg-success/10' },
-                          { key: 'reject', label: 'Reject', icon: XCircle, cls: 'border-destructive/30 text-destructive hover:bg-destructive/10' },
-                          { key: 'callback', label: 'Callback', icon: PhoneCall, cls: 'border-warning/30 text-warning hover:bg-warning/10' },
-                          { key: 'hold', label: 'Hold', icon: Pause, cls: 'border-muted-foreground/30 text-muted-foreground hover:bg-muted' },
-                        ].map(d => (
-                          <Button
-                            key={d.key}
-                            variant="outline"
-                            className={`flex-col h-16 gap-1 ${d.cls} ${evalDecision === d.key ? 'ring-2 ring-ring' : ''}`}
-                            onClick={() => setEvalDecision(d.key)}
-                          >
-                            <d.icon className="h-5 w-5" />
-                            <span className="text-xs">{d.label}</span>
-                          </Button>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-sm text-muted-foreground mr-2">Rating:</span>
-                        {[1,2,3,4,5].map(s => (
-                          <button key={s} onClick={() => setEvalRating(s)} className="focus:outline-none">
-                            <Star className={`h-6 w-6 transition-colors ${s <= evalRating ? 'text-warning fill-warning' : 'text-muted-foreground hover:text-warning/50'}`} />
-                          </button>
-                        ))}
-                      </div>
-                      <Textarea placeholder="Notes..." value={evalNotes} onChange={e => setEvalNotes(e.target.value)} rows={3} />
-                      <Button
-                        className="w-full"
-                        disabled={!evalDecision || evalRating === 0 || evalMutation.isPending}
-                        onClick={() => evalMutation.mutate({
-                          application_id: call.applications?.id ?? '',
-                          decision: evalDecision,
-                          rating: evalRating,
-                          notes: evalNotes,
-                        })}
-                      >
-                        {evalMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                        Submit Evaluation
-                      </Button>
-                    </div>
+                    <p className="text-sm text-muted-foreground">No evaluation recorded yet. Application decisions are managed from the Applications tab.</p>
                   )}
                 </div>
 
