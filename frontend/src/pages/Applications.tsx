@@ -65,6 +65,11 @@ export default function Applications() {
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [pendingAppId, setPendingAppId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  );
 
   const { data, isLoading, error } = useApplications({ page: 1 });
   const approveInterviewMutation = useApproveInterview();
@@ -72,6 +77,28 @@ export default function Applications() {
 
   const handleReject = (id: string) => updateStatusMutation.mutate({ id, status: 'rejected' });
   const openDetail = (id: string) => { setSelectedAppId(id); setSheetOpen(true); };
+
+  const openInviteDialog = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPendingAppId(id);
+    setSelectedDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+    setDialogOpen(true);
+  };
+
+  const handleConfirmInvite = () => {
+    if (!pendingAppId) return;
+    approveInterviewMutation.mutate({
+      id: pendingAppId,
+      deadline: selectedDate?.toISOString(),
+    });
+    setDialogOpen(false);
+    setPendingAppId(null);
+  };
+
+  const handleCancelInvite = () => {
+    setDialogOpen(false);
+    setPendingAppId(null);
+  };
 
   const allApps = [...(data?.data ?? [])].sort((a, b) => (getScore(b.ai_screening_score) ?? 0) - (getScore(a.ai_screening_score) ?? 0));
 
