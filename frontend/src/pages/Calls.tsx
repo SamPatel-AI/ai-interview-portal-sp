@@ -13,7 +13,6 @@ import EmptyState from '@/components/molecules/EmptyState';
 import CallDetailSheet from '@/components/organisms/calls/CallDetailSheet';
 import { useCalls, useInitiateCall, useScheduleCall } from '@/domains/calls';
 import { useApplications } from '@/domains/applications';
-import { CALL_STATUS_COLORS } from '@/lib/constants';
 
 const CALL_STATUS_LABELS: Record<string, string> = {
   completed: 'Completed',
