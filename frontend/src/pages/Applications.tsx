@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState<string>('all');
 
   const { data, isLoading, error } = useApplications({ page: 1 });
   const approveInterviewMutation = useApproveInterview();
@@ -44,7 +45,21 @@ export default function Applications() {
   const handleReject = (id: string) => updateStatusMutation.mutate({ id, status: 'rejected' });
   const openDetail = (id: string) => { setSelectedAppId(id); setSheetOpen(true); };
 
-  const apps = [...(data?.data ?? [])].sort((a, b) => (getScore(b.ai_screening_score) ?? 0) - (getScore(a.ai_screening_score) ?? 0));
+  const allApps = [...(data?.data ?? [])].sort((a, b) => (getScore(b.ai_screening_score) ?? 0) - (getScore(a.ai_screening_score) ?? 0));
+
+  const companies = useMemo(() => {
+    const names = new Set<string>();
+    allApps.forEach((app) => {
+      const name = app.jobs?.client_companies?.name;
+      if (name) names.add(name);
+    });
+    return Array.from(names).sort();
+  }, [allApps]);
+
+  const filteredApps = selectedCompany === 'all'
+    ? allApps
+    : allApps.filter((app) => app.jobs?.client_companies?.name === selectedCompany);
+
   const candidateName = (app: Application) =>
     app.candidates ? `${app.candidates.first_name} ${app.candidates.last_name}` : 'Unknown';
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -54,25 +69,50 @@ export default function Applications() {
 
   if (isLoading) return <TableSkeleton cols={6} />;
   if (error) return <EmptyState icon={ClipboardCheck} title="Failed to load applications" description={error instanceof Error ? error.message : 'An error occurred'} />;
-  if (apps.length === 0) return <EmptyState icon={ClipboardCheck} title="No applications yet" description="Applications will appear here when candidates apply to your jobs." />;
+  if (allApps.length === 0) return <EmptyState icon={ClipboardCheck} title="No applications yet" description="Applications will appear here when candidates apply to your jobs." />;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <div className="flex gap-2">
-          <Button variant={view === 'kanban' ? 'default' : 'outline'} size="sm" onClick={() => setView('kanban')}>
-            <LayoutGrid className="h-4 w-4 mr-1" />Kanban
+        <div />
+        <div className="flex gap-1">
+          <Button variant={view === 'kanban' ? 'default' : 'outline'} size="icon" className="h-9 w-9" onClick={() => setView('kanban')}>
+            <LayoutGrid className="h-4 w-4" />
           </Button>
-          <Button variant={view === 'table' ? 'default' : 'outline'} size="sm" onClick={() => setView('table')}>
-            <List className="h-4 w-4 mr-1" />Table
+          <Button variant={view === 'table' ? 'default' : 'outline'} size="icon" className="h-9 w-9" onClick={() => setView('table')}>
+            <List className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {view === 'kanban' ? (
+      {companies.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant={selectedCompany === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSelectedCompany('all')}
+          >
+            All
+          </Button>
+          {companies.map((company) => (
+            <Button
+              key={company}
+              variant={selectedCompany === company ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedCompany(company)}
+            >
+              {company}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {filteredApps.length === 0 ? (
+        <EmptyState icon={ClipboardCheck} title="No applications" description={`No applications match the selected company filter.`} />
+      ) : view === 'kanban' ? (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {statuses.map((status) => {
-            const filtered = apps.filter(a => a.status === status);
+            const filtered = filteredApps.filter(a => a.status === status);
             return (
               <div key={status} className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -147,7 +187,7 @@ export default function Applications() {
                 </tr>
               </thead>
               <tbody>
-                {apps.map((app) => (
+                {filteredApps.map((app) => (
                   <tr key={app.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => openDetail(app.id)}>
                     <td className="p-3 text-sm font-medium">{candidateName(app)}</td>
                     <td className="p-3 text-sm text-muted-foreground">{app.jobs?.title ?? 'Unknown'}</td>
