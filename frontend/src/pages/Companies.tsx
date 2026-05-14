@@ -17,12 +17,11 @@ export default function Companies() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search companies..." className="pl-8" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Company</Button>
       </div>
 
       {isLoading ? (
@@ -30,7 +29,7 @@ export default function Companies() {
       ) : error ? (
         <EmptyState icon={Building2} title="Failed to load companies" description={error instanceof Error ? error.message : 'An error occurred'} />
       ) : companies.length === 0 ? (
-        <EmptyState icon={Building2} title="No companies yet" description="Add your first client company to start organizing jobs and agents." actionLabel="Add Company" onAction={() => setCreateOpen(true)} />
+        <EmptyState icon={Building2} title="No companies yet" description="Add your first client company to start organizing jobs and agents." />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {companies.map((company) => (
@@ -59,7 +58,6 @@ export default function Companies() {
         </div>
       )}
 
-      <CreateCompanyDialog open={createOpen} onOpenChange={setCreateOpen} />
       <CompanyDetailSheet companyId={selectedCompanyId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
   );
