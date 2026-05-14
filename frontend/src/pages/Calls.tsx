@@ -117,9 +117,14 @@ export default function Calls() {
                       {call.direction === 'outbound' ? <PhoneOutgoing className="h-4 w-4 text-primary" /> : <PhoneIncoming className="h-4 w-4 text-success" />}
                     </TableCell>
                     <TableCell>
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CALL_STATUS_COLORS[call.status] ?? ''}`}>
-                        {CALL_STATUS_LABELS[call.status] ?? call.status}
-                      </span>
+                      {(() => {
+                        const outcome = getCallOutcome(call);
+                        return (
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${outcome.color}`}>
+                            {outcome.label}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {(call as any).booking_source === 'cal.com' ? (
