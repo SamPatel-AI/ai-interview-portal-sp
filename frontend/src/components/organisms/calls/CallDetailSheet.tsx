@@ -179,6 +179,20 @@ export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
                   </div>
                 </div>
 
+                {/* Audio */}
+                {call.recording_url && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium flex items-center gap-2"><Volume2 className="h-4 w-4" />Recording</h3>
+                        <a href={call.recording_url} download className="text-xs text-primary hover:underline">Download</a>
+                      </div>
+                      <audio controls src={call.recording_url} className="w-full mt-2" />
+                    </div>
+                  </>
+                )}
+
                 {/* AI Analysis */}
                 {call.call_analysis && (
                   <>
