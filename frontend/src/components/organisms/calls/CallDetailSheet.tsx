@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
-  PhoneIncoming, PhoneOutgoing, Star, Loader2,
+  PhoneIncoming, PhoneOutgoing, Star, Loader2, CheckCircle, XCircle,
   MessageSquare, Volume2
 } from 'lucide-react';
 

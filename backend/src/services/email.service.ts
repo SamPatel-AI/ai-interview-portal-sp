@@ -32,7 +32,21 @@ function getTransporter(): nodemailer.Transporter | null {
 
 // ─── Email Templates ───────────────────────────────────────
 
-function invitationTemplate(candidateName: string, jobTitle: string): { subject: string; body: string } {
+const CAL_BASE_URL = 'https://cal.com/saanvitech/screen-interview-x-saanvi-tech';
+
+function buildCalUrl(deadline?: Date | null): string {
+  if (!deadline) return CAL_BASE_URL;
+  // Cal.com supports ?date= to open to a specific date and ?endDate= to cap booking window
+  const dateStr = deadline.toISOString().split('T')[0]; // YYYY-MM-DD
+  return `${CAL_BASE_URL}?endDate=${dateStr}`;
+}
+
+function invitationTemplate(candidateName: string, jobTitle: string, deadline?: Date | null): { subject: string; body: string } {
+  const calUrl = buildCalUrl(deadline);
+  const deadlineNote = deadline
+    ? `<p style="color:#c0392b; font-weight:bold;">⚠️ Booking Deadline: ${deadline.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. Please book your slot before this date — slots after this deadline will not be available.</p>`
+    : '';
+
   return {
     subject: `Interview Scheduling - Job: ${jobTitle}`,
     body: `<div style="font-family: Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #222;">
@@ -40,9 +54,11 @@ function invitationTemplate(candidateName: string, jobTitle: string): { subject:
 
   <p>Thank you for your interest in the <strong>${jobTitle}</strong> role at Saanvi Technology. After reviewing your profile, we are pleased to invite you to the next step in our hiring process.</p>
 
+  ${deadlineNote}
+
   <p><strong>Schedule Your Screening Interview</strong><br>
   Please use the link below to book a 15-20 minute slot at a time that works best for you:<br>
-  <a href="https://cal.com/saanvitech/screen-interview-x-saanvi-tech">https://cal.com/saanvitech/screen-interview-x-saanvi-tech</a></p>
+  <a href="${calUrl}">${calUrl}</a></p>
 
   <p><strong>Important - Please Read Before Booking</strong><br>
   This screening interview is conducted by an AI-powered voice agent on behalf of Saanvi Technology's recruitment team. By booking a time slot through the link above, you acknowledge and consent to the following:</p>
@@ -158,10 +174,11 @@ export async function sendEmail(params: {
 export async function sendInvitationEmail(
   candidate: Pick<Candidate, 'id' | 'first_name' | 'last_name' | 'email'>,
   jobTitle: string,
-  applicationId: string
+  applicationId: string,
+  deadline?: Date | null
 ): Promise<void> {
   const candidateName = `${candidate.first_name} ${candidate.last_name}`.trim();
-  const template = invitationTemplate(candidateName, jobTitle);
+  const template = invitationTemplate(candidateName, jobTitle, deadline);
 
   await sendEmail({
     candidateId: candidate.id,

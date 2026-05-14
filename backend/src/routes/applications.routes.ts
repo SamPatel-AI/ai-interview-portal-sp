@@ -30,7 +30,21 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const offset = (page - 1) * limit;
-    const { job_id, status, recruiter_id, candidate_id } = req.query;
+    const { job_id, status, recruiter_id, candidate_id, company_id } = req.query;
+
+    // If filtering by company, resolve to matching job IDs first
+    let jobIdFilter: string[] | null = null;
+    if (company_id) {
+      const { data: companyJobs } = await supabaseAdmin
+        .from('jobs')
+        .select('id')
+        .eq('org_id', req.user!.org_id)
+        .eq('client_company_id', company_id as string);
+      jobIdFilter = (companyJobs ?? []).map((j: any) => j.id);
+      if (jobIdFilter.length === 0) {
+        return res.json({ success: true, data: [], total: 0, page, limit, totalPages: 0 });
+      }
+    }
 
     let query = supabaseAdmin
       .from('applications')
@@ -42,6 +56,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       `, { count: 'exact' })
       .eq('org_id', req.user!.org_id);
 
+    if (jobIdFilter) query = query.in('job_id', jobIdFilter);
     if (job_id) query = query.eq('job_id', job_id);
     if (status) query = query.eq('status', status);
     if (recruiter_id) query = query.eq('assigned_recruiter_id', recruiter_id);
@@ -240,12 +255,25 @@ router.post(
         throw new AppError(409, 'Invitation email has already been sent for this application');
       }
 
-      // Send invitation email
+      // Parse optional deadline from request body
+      const { deadline } = req.body as { deadline?: string };
+      const deadlineDate = deadline ? new Date(deadline) : null;
+
+      // Store deadline on the application if provided
+      if (deadlineDate) {
+        await supabaseAdmin
+          .from('applications')
+          .update({ interview_deadline: deadlineDate.toISOString() })
+          .eq('id', req.params.id);
+      }
+
+      // Send invitation email (with deadline if set)
       const { sendInvitationEmail } = await import('../services/email.service');
       await sendInvitationEmail(
         { id: candidate.id, first_name: candidate.first_name, last_name: candidate.last_name, email: candidate.email },
         job.title,
-        req.params.id as string
+        req.params.id as string,
+        deadlineDate
       );
 
       await supabaseAdmin.from('activity_log').insert({
