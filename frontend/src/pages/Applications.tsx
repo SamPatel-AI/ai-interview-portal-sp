@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, List, CheckCircle, XCircle, Mail, ClipboardCheck, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { LayoutGrid, List, CheckCircle, XCircle, Mail, ClipboardCheck, ThumbsUp, ThumbsDown, Phone } from 'lucide-react';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import ApplicationDetailSheet from '@/components/organisms/applications/ApplicationDetailSheet';
