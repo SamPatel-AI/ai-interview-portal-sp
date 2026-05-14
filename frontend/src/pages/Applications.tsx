@@ -202,7 +202,7 @@ export default function Applications() {
 
                         {canApproveForInterview(app.status) && getScore(app.ai_screening_score) !== null && (
                           <div className="flex gap-1 mt-2">
-                            <Button size="sm" variant="outline" className="h-7 flex-1 text-xs text-accent hover:bg-accent/10 hover:text-accent border-accent/20" onClick={(e) => { e.stopPropagation(); approveInterviewMutation.mutate(app.id); }}>
+                            <Button size="sm" variant="outline" className="h-7 flex-1 text-xs text-accent hover:bg-accent/10 hover:text-accent border-accent/20" onClick={(e) => openInviteDialog(app.id, e)}>
                               <Mail className="h-3 w-3 mr-1" />Send Invite
                             </Button>
                             <Button size="sm" variant="outline" className="h-7 flex-1 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20" onClick={(e) => { e.stopPropagation(); handleReject(app.id); }}>
