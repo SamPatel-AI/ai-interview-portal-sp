@@ -50,8 +50,8 @@ export default function Applications() {
   };
 
   const handleConfirmInvite = () => {
-    if (!pendingAppId) return;
-    approveInterviewMutation.mutate({ id: pendingAppId, deadline: selectedDate?.toISOString() });
+    if (!pendingAppId || !selectedDate) return;
+    approveInterviewMutation.mutate({ id: pendingAppId, deadline: selectedDate.toISOString() });
     setDialogOpen(false);
     setPendingAppId(null);
   };
