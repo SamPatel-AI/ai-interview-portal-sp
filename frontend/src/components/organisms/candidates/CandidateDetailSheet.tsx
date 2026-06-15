@@ -81,7 +81,11 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
                 <Badge variant="outline">{c.source}</Badge>
                 {c.work_authorization && <Badge variant="secondary">{c.work_authorization}</Badge>}
               </div>
-            </div>
+              {c.resume_url && (
+                <Button variant="outline" size="sm" asChild className="w-fit">
+                  <a href={c.resume_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 mr-1" />View Résumé</a>
+                </Button>
+              )}
             <ScrollArea className="flex-1 p-6">
               <div className="space-y-6">
                 {/* Resume */}
