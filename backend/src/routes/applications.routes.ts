@@ -51,7 +51,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       .select(`
         *,
         candidates (id, first_name, last_name, email, phone),
-        jobs (id, title, client_company_id, status, client_companies (id, name)),
+        jobs (id, title, interview_deadline, client_company_id, status, client_companies (id, name)),
         calls (id, status, disconnection_reason, started_at),
         email_logs (count)
       `, { count: 'exact' })
@@ -234,9 +234,9 @@ router.post(
       const { data: app, error } = await supabaseAdmin
         .from('applications')
         .select(`
-          id, status, ai_screening_score,
+          id, status, ai_screening_score, job_id,
           candidates (id, first_name, last_name, email),
-          jobs (title)
+          jobs (id, title, interview_deadline)
         `)
         .eq('id', req.params.id)
         .eq('org_id', req.user!.org_id)
@@ -262,19 +262,29 @@ router.post(
         throw new AppError(409, 'Invitation email has already been sent for this application');
       }
 
-      // Parse optional deadline from request body
+      // Deadline lives on the JOB. Use the job's deadline; if it has none yet,
+      // require one in the body (first invite for this job) and set it on the job.
       const { deadline } = req.body as { deadline?: string };
-      const deadlineDate = deadline ? new Date(deadline) : null;
+      let deadlineDate: Date | null = job.interview_deadline ? new Date(job.interview_deadline) : null;
 
-      // Store deadline on the application if provided
-      if (deadlineDate) {
+      if (!deadlineDate) {
+        if (!deadline) {
+          throw new AppError(400, 'An interview deadline must be set for this job before sending invites.');
+        }
+        deadlineDate = new Date(deadline);
         await supabaseAdmin
-          .from('applications')
+          .from('jobs')
           .update({ interview_deadline: deadlineDate.toISOString() })
-          .eq('id', req.params.id);
+          .eq('id', job.id);
       }
 
-      // Send invitation email (with deadline if set)
+      // Mirror the effective deadline onto the application for its own record.
+      await supabaseAdmin
+        .from('applications')
+        .update({ interview_deadline: deadlineDate.toISOString() })
+        .eq('id', req.params.id);
+
+      // Send invitation email (capped to the job deadline)
       const { sendInvitationEmail } = await import('../services/email.service');
       await sendInvitationEmail(
         { id: candidate.id, first_name: candidate.first_name, last_name: candidate.last_name, email: candidate.email },
