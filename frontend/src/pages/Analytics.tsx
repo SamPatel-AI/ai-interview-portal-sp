@@ -50,7 +50,8 @@ export default function Analytics() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="recruiter">Recruiter Performance</TabsTrigger>
+          <TabsTrigger value="workload">Recruiter Workload</TabsTrigger>
+          <TabsTrigger value="recruiter">My Performance</TabsTrigger>
           <TabsTrigger value="agent">Agent Performance</TabsTrigger>
         </TabsList>
 
