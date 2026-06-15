@@ -48,6 +48,26 @@ function formatPayRate(rates?: CeipalJob['pay_rates']): string | null {
   return null;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * GET a CEIPAL endpoint with throttling + exponential backoff on 429.
+ * CEIPAL rate-limits aggressively; a small inter-call delay plus backoff keeps
+ * the call-heavy client sync from tripping the limiter.
+ */
+async function ceipalGet(url: string, token: string, maxRetries = 5): Promise<Response> {
+  let response: Response | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    response = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    });
+    if (response.status !== 429) return response;
+    // 429 → wait (1s, 2s, 4s, 8s, 16s, capped) then retry.
+    await sleep(Math.min(1000 * 2 ** attempt, 20000));
+  }
+  return response as Response; // last response (still 429) — caller decides
+}
+
 /**
  * Authenticate with CEIPAL API and get an access token.
  */
@@ -88,12 +108,7 @@ async function fetchCeipalJobs(token: string, searchKey?: string): Promise<Ceipa
     if (searchKey) url.searchParams.set('searchkey', searchKey);
     url.searchParams.set('page', String(page));
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
+    const response = await ceipalGet(url.toString(), token);
 
     if (!response.ok) throw new Error(`CEIPAL jobs fetch failed: ${response.status}`);
 
@@ -121,9 +136,7 @@ async function fetchCeipalClients(token: string): Promise<CeipalClient[]> {
   do {
     const url = new URL('https://api.ceipal.com/v1/getClientsList/');
     url.searchParams.set('page', String(page));
-    const response = await fetch(url.toString(), {
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    });
+    const response = await ceipalGet(url.toString(), token);
     if (!response.ok) throw new Error(`CEIPAL clients fetch failed: ${response.status}`);
     const data = (await response.json()) as {
       results?: Array<{ id?: string; name?: string }>;
@@ -143,9 +156,7 @@ async function fetchCeipalClients(token: string): Promise<CeipalClient[]> {
  * detect if the `client=` filter is being ignored (returns the full set).
  */
 async function fetchTotalJobCount(token: string): Promise<number> {
-  const r = await fetch('https://api.ceipal.com/v1/getJobPostingsList?page=1', {
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-  });
+  const r = await ceipalGet('https://api.ceipal.com/v1/getJobPostingsList?page=1', token);
   if (!r.ok) return 0;
   const data = (await r.json()) as { results?: unknown[]; count?: number };
   return data.count ?? (data.results?.length || 0);
@@ -170,9 +181,7 @@ async function fetchClientJobCodes(
     // `client` must be the raw encoded id; verified that this param actually
     // filters the result set (other param names are silently ignored).
     const url = `https://api.ceipal.com/v1/getJobPostingsList?client=${clientId}&page=${page}`;
-    const response = await fetch(url, {
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    });
+    const response = await ceipalGet(url, token);
     if (!response.ok) break; // a single client failing shouldn't abort the whole sync
     const data = (await response.json()) as {
       results?: CeipalJob[];
@@ -255,6 +264,8 @@ async function syncCeipalClients(
       continue;
     }
     for (const code of codes) jobCodeToClientId.set(code, ourId);
+
+    await sleep(250); // be polite to CEIPAL's rate limiter between clients
   }
 
   return { clientCount, jobCodeToClientId, filterIgnoredClients };
