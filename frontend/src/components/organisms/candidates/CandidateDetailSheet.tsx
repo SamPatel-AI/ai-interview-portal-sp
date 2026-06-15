@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiResponse } from '@/lib/api';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -6,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, Mail, Phone, MapPin, FileText, ChevronDown, ExternalLink } from 'lucide-react';
+import { Loader2, Mail, Phone, MapPin, FileText, ChevronDown, ExternalLink, Sparkles } from 'lucide-react';
+import type { ScreeningResult } from '@/domains/applications';
 
 interface CandidateDetail {
   id: string;
@@ -23,7 +25,9 @@ interface CandidateDetail {
   applications?: {
     id: string;
     status: string;
+    created_at: string;
     ai_screening_score: number | { score: number; explanation?: string } | null;
+    ai_screening_result?: ScreeningResult | null;
     jobs?: { title: string };
   }[];
   calls?: {
@@ -33,6 +37,7 @@ interface CandidateDetail {
     started_at: string | null;
   }[];
 }
+
 
 const getScore = (score: number | { score: number; explanation?: string } | null | undefined): number | null => {
   if (score === null || score === undefined) return null;
