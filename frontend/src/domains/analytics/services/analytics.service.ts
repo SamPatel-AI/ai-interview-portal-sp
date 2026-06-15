@@ -13,6 +13,11 @@ export async function fetchRecruiterWorkloads() {
   return apiRequest<ApiResponse<RecruiterWorkload[]>>('/api/analytics/recruiters');
 }
 
+export async function getRecruiterWorkload(): Promise<RecruiterWorkload[]> {
+  const res = await apiRequest<ApiResponse<RecruiterWorkload[]>>('/api/analytics/recruiters');
+  return res.data ?? [];
+}
+
 export async function fetchJobStats(id: string) {
   return apiRequest<ApiResponse<Record<string, unknown>>>(`/api/analytics/job/${id}`);
 }
