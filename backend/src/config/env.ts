@@ -18,6 +18,9 @@ const envSchema = z.object({
   RETELL_WEBHOOK_SECRET: z.string().optional(),
   RETELL_FROM_NUMBER: z.string().default('+10000000000'),
 
+  // Shared secret required (when set) on candidate-intake and cal-booking webhooks
+  WEBHOOK_SHARED_SECRET: z.string().optional(),
+
   CEIPAL_API_KEY: z.string().default(''),
   CEIPAL_EMAIL: z.string().default(''),
   CEIPAL_PASSWORD: z.string().default(''),
@@ -29,6 +32,14 @@ const envSchema = z.object({
   MS_GRAPH_CLIENT_SECRET: z.string().optional(),
   MS_GRAPH_TENANT_ID: z.string().optional(),
   MS_GRAPH_REDIRECT_URI: z.string().optional(),
+
+  // Email transport: 'smtp' for real delivery, 'log' for dev (log-only)
+  EMAIL_TRANSPORT: z.enum(['smtp', 'log']).default('log'),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
 
   FRONTEND_URL: z.string().default('http://localhost:8082'),
 });

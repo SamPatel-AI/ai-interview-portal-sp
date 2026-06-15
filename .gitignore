@@ -24,3 +24,4 @@ scratch/
 # Logs
 *.log
 npm-debug.log*
+supabase/.temp/

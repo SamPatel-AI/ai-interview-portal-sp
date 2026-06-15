@@ -44,12 +44,16 @@ async function seed() {
     { name: 'General Motors', description: 'Global automotive company. Active positions in embedded systems, cloud, and AI/ML.', org_id: orgId },
   ];
 
-  const { data: companyRows } = await supabase
+  // No unique constraint on (org_id, name), so check-then-insert
+  const { data: existingCompanies } = await supabase
     .from('client_companies')
-    .upsert(companies, { onConflict: 'org_id,name', ignoreDuplicates: true })
-    .select('id, name');
+    .select('id, name')
+    .eq('org_id', orgId);
 
-  // Fetch all companies (in case upsert returned nothing due to duplicates)
+  if (!existingCompanies || existingCompanies.length === 0) {
+    await supabase.from('client_companies').insert(companies);
+  }
+
   const { data: allCompanies } = await supabase
     .from('client_companies')
     .select('id, name')
@@ -169,6 +173,11 @@ Maintain a professional, structured approach. Healthcare compliance awareness is
           ],
         },
       });
+    } else {
+      // Always update company link in case it was null on first seed
+      await supabase.from('ai_agents').update({
+        client_company_id: agentConfig.client_company_id,
+      }).eq('id', existingAgent.id);
     }
   }
 
@@ -288,6 +297,12 @@ Maintain a professional, structured approach. Healthcare compliance awareness is
 
     if (!existing) {
       await supabase.from('jobs').insert(job);
+    } else {
+      // Always update company and agent links in case they were null on first seed
+      await supabase.from('jobs').update({
+        client_company_id: job.client_company_id,
+        ai_agent_id: job.ai_agent_id,
+      }).eq('id', existing.id);
     }
   }
 

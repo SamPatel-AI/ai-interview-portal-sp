@@ -27,3 +27,22 @@ export function formatPhoneE164(raw: string): string {
 export function isValidE164(phone: string): boolean {
   return /^\+[1-9]\d{6,14}$/.test(phone);
 }
+
+/**
+ * Strip a phone string down to its last 10 digits for comparison.
+ * Works regardless of formatting, country code prefix, etc.
+ */
+export function normalizeForLookup(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  return digits.slice(-10);
+}
+
+/**
+ * Compare two phone numbers by their normalized (last 10 digits) form.
+ * Handles any mix of formats: +1 (555) 123-4567 vs 5551234567 etc.
+ */
+export function phonesMatch(a: string, b: string): boolean {
+  const na = normalizeForLookup(a);
+  const nb = normalizeForLookup(b);
+  return na.length === 10 && nb.length === 10 && na === nb;
+}

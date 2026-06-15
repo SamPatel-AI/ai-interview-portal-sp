@@ -1,7 +1,7 @@
 import { Queue, Worker } from 'bullmq';
 import { redis } from '../config/redis';
 import { supabaseAdmin } from '../config/database';
-import { sendInvitationEmail, sendRejectionEmail } from '../services/email.service';
+import { sendInvitationEmail, sendRejectionEmail, sendFollowUpEmail, sendReEngagementEmail } from '../services/email.service';
 import { logger } from '../utils/logger';
 
 // ─── Queue Definition ──────────────────────────────────────
@@ -42,6 +42,17 @@ export const emailWorker = new Worker(
       case 'rejection':
         await sendRejectionEmail(candidate, jobTitle, applicationId);
         break;
+      case 'follow_up':
+        await sendFollowUpEmail(candidate, jobTitle, applicationId);
+        break;
+      case 're_engagement':
+        await sendReEngagementEmail(
+          candidate,
+          jobTitle,
+          job.data.jobDescription || '',
+          job.data.companyName || 'our company'
+        );
+        break;
       default:
         logger.warn(`Unknown email type: ${type}`);
     }
@@ -66,10 +77,12 @@ emailWorker.on('failed', (job, err) => {
  * Queue an email to be sent.
  */
 export async function queueEmail(params: {
-  type: 'invitation' | 'rejection' | 'follow_up';
+  type: 'invitation' | 'rejection' | 'follow_up' | 're_engagement';
   candidateId: string;
   applicationId: string;
   jobTitle: string;
+  companyName?: string;
+  jobDescription?: string;
 }): Promise<void> {
   await emailQueue.add(
     `email-${params.type}-${params.candidateId}`,

@@ -24,6 +24,15 @@ import settingsRoutes from './routes/settings.routes';
 import reportsRoutes from './routes/reports.routes';
 import portalRoutes from './routes/portal.routes';
 import clientPortalRoutes from './routes/clientPortal.routes';
+import reengagementRoutes from './routes/reengagement.routes';
+import { startReengagementScheduler } from './jobs/reengagement.job';
+
+// Side-effect imports — BullMQ workers auto-start on module instantiation
+import './jobs/emailSender.job';
+import './jobs/callRetry.job';
+import './jobs/callScheduler.job';
+import './jobs/ceipalSync.job';
+import './jobs/resumeProcessor.job';
 
 const app = express();
 
@@ -79,6 +88,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/portal', portalRoutes);
 app.use('/api/client-portal', clientPortalRoutes);
+app.use('/api/reengagement', reengagementRoutes);
 
 // --- 404 handler ---
 app.use((_req, res) => {
@@ -92,6 +102,11 @@ app.use(errorHandler);
 const PORT = parseInt(env.PORT, 10);
 app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT} in ${env.NODE_ENV} mode`);
+
+  // Start background job schedulers
+  startReengagementScheduler().catch(err => {
+    logger.error('Failed to start re-engagement scheduler:', err);
+  });
 });
 
 export default app;

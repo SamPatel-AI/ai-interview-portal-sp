@@ -57,7 +57,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       .select(`
         *,
         client_companies (id, name),
-        users!ai_agents_created_by_fkey (id, full_name)
+        users!ai_agents_created_by_fkey (id, full_name),
+        jobs (count)
       `, { count: 'exact' })
       .eq('org_id', req.user!.org_id)
       .order('created_at', { ascending: false });
@@ -69,7 +70,13 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     if (error) throw new AppError(500, 'Failed to fetch agents');
 
-    res.json({ success: true, data, total: count });
+    const enriched = (data ?? []).map((a: any) => ({
+      ...a,
+      jobs_count: a.jobs?.[0]?.count ?? 0,
+      jobs: undefined,
+    }));
+
+    res.json({ success: true, data: enriched, total: count });
   } catch (err) {
     next(err);
   }
