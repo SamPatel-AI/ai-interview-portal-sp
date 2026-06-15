@@ -50,7 +50,6 @@ export default function DashboardLayout() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>New Candidate</DropdownMenuItem>
                 <DropdownMenuItem>New Job</DropdownMenuItem>
                 <DropdownMenuItem>New Agent</DropdownMenuItem>
               </DropdownMenuContent>
