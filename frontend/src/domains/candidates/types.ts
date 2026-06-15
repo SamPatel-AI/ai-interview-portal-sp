@@ -34,12 +34,3 @@ export interface CandidateDetail extends Candidate {
   }>;
 }
 
-export interface CreateCandidateInput {
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone?: string;
-  location?: string;
-  work_authorization?: string;
-  source?: string;
-}
