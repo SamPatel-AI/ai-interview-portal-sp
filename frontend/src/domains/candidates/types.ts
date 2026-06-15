@@ -1,4 +1,6 @@
 import type { ScreeningResult } from '@/domains/applications';
+
+export interface Candidate {
   id: string;
   first_name: string;
   last_name: string;
@@ -21,6 +23,7 @@ export interface CandidateDetail extends Candidate {
     job_id: string;
     status: string;
     ai_screening_score: number | null;
+    ai_screening_result?: ScreeningResult | null;
     created_at: string;
     jobs: { id: string; title: string; client_company_id: string; status: string };
   }>;
@@ -33,4 +36,3 @@ export interface CandidateDetail extends Candidate {
     recording_url: string | null;
   }>;
 }
-
