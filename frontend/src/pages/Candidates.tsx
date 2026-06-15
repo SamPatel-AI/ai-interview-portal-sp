@@ -7,6 +7,7 @@ import { Search, Users } from 'lucide-react';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import CandidateDetailSheet from '@/components/organisms/candidates/CandidateDetailSheet';
+import Pagination from '@/components/molecules/Pagination';
 import { useCandidates } from '@/domains/candidates';
 
 const sourceBadgeVariant = (source: string | null) => {
