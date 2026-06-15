@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { DashboardSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import { useOverview } from '@/domains/analytics';
+import type { RecentActivityItem, PipelineStage } from '@/domains/analytics';
 
 const pipelineColors: Record<string, string> = {
   New: 'bg-info',
@@ -43,7 +44,7 @@ export default function Dashboard() {
     );
   }
 
-  const overview = data.data as any;
+  const overview = data.data;
 
   const stats = [
     { label: 'Total Candidates', value: overview.total_candidates?.toLocaleString() ?? '0', icon: Users },
@@ -52,15 +53,15 @@ export default function Dashboard() {
     { label: 'Pending Reviews', value: String(overview.pending_reviews ?? 0), icon: ClipboardCheck },
   ];
 
-  const recentActivity = (overview.recent_activity ?? []).map((item: any) => ({
+  const recentActivity = (overview.recent_activity ?? []).map((item: RecentActivityItem) => ({
     user: item.users?.full_name || item.user || 'System',
     action: `${formatAction(item.action)}${item.details?.candidate ? ` — ${item.details.candidate}` : ''}${item.details?.email ? ` (${item.details.email})` : ''}`,
     time: item.created_at ? new Date(item.created_at).toLocaleString() : '',
   }));
   const scheduledCalls = overview.scheduled_calls ?? [];
   const topJobs = overview.top_jobs ?? [];
-  const pipeline = overview.pipeline ?? overview.application_stats ?? [];
-  const maxPipeline = pipeline.length > 0 ? Math.max(...pipeline.map((p: any) => p.count || 0), 1) : 1;
+  const pipeline: PipelineStage[] = overview.pipeline ?? overview.application_stats ?? [];
+  const maxPipeline = pipeline.length > 0 ? Math.max(...pipeline.map((p) => p.count || 0), 1) : 1;
 
   return (
     <div className="space-y-6 animate-fade-in">
