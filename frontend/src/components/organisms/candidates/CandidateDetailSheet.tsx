@@ -122,6 +122,24 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
 
                 <Separator />
 
+                {latestScreening?.overall_fit_rating != null && (
+                  <>
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium flex items-center gap-2"><Sparkles className="h-4 w-4" />AI Screening Summary</h3>
+                      <div className="p-3 border rounded-lg space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">Overall fit:</span>
+                          <span className={`text-lg font-bold ${scoreColor(latestScreening.overall_fit_rating)}`}>{latestScreening.overall_fit_rating}</span>
+                        </div>
+                        {latestScreening.justification_for_rating && (
+                          <p className="text-sm text-muted-foreground line-clamp-2">{latestScreening.justification_for_rating}</p>
+                        )}
+                      </div>
+                    </div>
+                    <Separator />
+                  </>
+                )}
+
                 {/* Applications */}
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium">Applications ({c.applications?.length ?? 0})</h3>
