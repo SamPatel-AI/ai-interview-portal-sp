@@ -1,7 +1,7 @@
 import { Queue, Worker } from 'bullmq';
 import { redis } from '../config/redis';
 import { supabaseAdmin } from '../config/database';
-import { resumeInterruptedCall } from '../services/call.service';
+import { initiateOutboundCall, resumeInterruptedCall } from '../services/call.service';
 import { logger } from '../utils/logger';
 
 // ─── Queue Definition ──────────────────────────────────────
@@ -21,15 +21,21 @@ export const callRetryQueue = new Queue('call-retry', {
 export const callRetryWorker = new Worker(
   'call-retry',
   async (job) => {
-    const { callId, orgId, reason } = job.data;
+    const { callId, orgId, reason, applicationId } = job.data;
 
-    logger.info(`Retrying call ${callId} (reason: ${reason})`);
+    logger.info(`Retrying call ${callId ?? applicationId} (reason: ${reason})`);
 
     try {
-      await resumeInterruptedCall(callId, orgId, 'system');
-      logger.info(`Call ${callId} retry successful`);
+      if (reason && String(reason).startsWith('auto_redial')) {
+        // No-answer / failed call → place a fresh outbound call.
+        await initiateOutboundCall({ applicationId, orgId, userId: null });
+      } else {
+        // Interrupted call → resume where it left off.
+        await resumeInterruptedCall(callId, orgId, 'system');
+      }
+      logger.info(`Call retry successful (reason: ${reason})`);
     } catch (err) {
-      logger.error(`Call ${callId} retry failed:`, err);
+      logger.error(`Call retry failed (reason: ${reason}):`, err);
       throw err; // Let BullMQ handle the retry
     }
   },
@@ -62,6 +68,28 @@ export async function scheduleCallRetry(
   );
 
   logger.info(`Scheduled retry for call ${callId} in ${delayMs / 1000}s`);
+}
+
+/**
+ * Schedule an auto-redial: place a fresh outbound call after a no-answer/failed
+ * call, within the booked slot. Capped by the caller (max attempts).
+ */
+export async function scheduleCallRedial(
+  applicationId: string,
+  orgId: string,
+  attempt: number,
+  delayMs: number = 180000 // 3 minutes between attempts
+): Promise<void> {
+  await callRetryQueue.add(
+    `redial-${applicationId}`,
+    { applicationId, orgId, reason: 'auto_redial' },
+    {
+      delay: delayMs,
+      jobId: `redial-${applicationId}-${attempt}`, // unique per attempt, prevents dupes
+    }
+  );
+
+  logger.info(`Scheduled auto-redial for application ${applicationId} (attempt ${attempt}) in ${delayMs / 1000}s`);
 }
 
 /**

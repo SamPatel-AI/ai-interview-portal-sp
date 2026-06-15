@@ -9,7 +9,7 @@ import { Application, Candidate, Job, AIAgent, Call } from '../types';
 interface InitiateCallParams {
   applicationId: string;
   orgId: string;
-  userId: string;
+  userId: string | null; // null for system-triggered (e.g. auto-redial)
   scheduledAt?: string; // ISO timestamp for delayed calls
 }
 

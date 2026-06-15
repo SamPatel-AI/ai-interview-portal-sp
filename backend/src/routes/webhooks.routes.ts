@@ -430,6 +430,24 @@ router.post('/retell/post-call', verifyRetellSignature, async (req: Request, res
         .eq('id', callRecord!.id);
     }
 
+    // Auto-redial no-answer / failed calls within the slot, up to 3 total attempts.
+    // After that the call is left as failed so it surfaces for manual recruiter action.
+    if (status === 'no_answer' || status === 'failed') {
+      const appId = callRecord!.application_id;
+      const { count: attempts } = await supabaseAdmin
+        .from('calls')
+        .select('id', { count: 'exact', head: true })
+        .eq('application_id', appId);
+      const MAX_ATTEMPTS = 3;
+      if ((attempts ?? 0) < MAX_ATTEMPTS && appId) {
+        const { scheduleCallRedial } = await import('../jobs/callRetry.job');
+        await scheduleCallRedial(appId, callRecord!.org_id, (attempts ?? 0) + 1);
+        logger.info(`Auto-redial scheduled for application ${appId} (attempt ${(attempts ?? 0) + 1}/${MAX_ATTEMPTS})`);
+      } else {
+        logger.info(`Application ${appId} exhausted ${MAX_ATTEMPTS} call attempts — left as failed for recruiter action`);
+      }
+    }
+
     // Auto-retry interrupted calls (max depth of 2 retries)
     if (status === 'interrupted') {
       // Count how deep in the retry chain we are
