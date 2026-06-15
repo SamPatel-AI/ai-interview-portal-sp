@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, Phone, Star, TrendingUp } from 'lucide-react';
+import { Download, Users, Phone, Star, TrendingUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { StatsSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
-import { useOverview, useRecruiterStats, useAgentStats } from '@/domains/analytics';
+import { Button } from '@/components/ui/button';
+import { useOverview, useRecruiterStats, useAgentStats, useExportReport } from '@/domains/analytics';
 import { useAgents } from '@/domains/agents';
 import { useAuthMe } from '@/domains/auth';
 
 export default function Analytics() {
   const [selectedAgentId, setSelectedAgentId] = useState('');
+  const [exportType, setExportType] = useState('candidates');
 
   const { data, isLoading, error } = useOverview();
   const { data: meData } = useAuthMe();
@@ -19,6 +21,9 @@ export default function Analytics() {
   const { data: recruiterData } = useRecruiterStats(recruiterId ?? null);
   const { data: agentsData } = useAgents();
   const { data: agentStatsData } = useAgentStats(selectedAgentId || null);
+  const exportMutation = useExportReport();
+
+  const handleExport = () => exportMutation.mutate(exportType);
 
   if (isLoading) return <div className="space-y-6"><StatsSkeleton /></div>;
   if (error) return <EmptyState title="Failed to load analytics" description={error instanceof Error ? error.message : 'An error occurred'} />;
@@ -48,6 +53,25 @@ export default function Analytics() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-6">
+          <div className="flex justify-end">
+            <div className="flex items-center gap-2">
+              <Select value={exportType} onValueChange={setExportType}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="candidates">Candidates</SelectItem>
+                  <SelectItem value="applications">Applications</SelectItem>
+                  <SelectItem value="calls">Calls</SelectItem>
+                  <SelectItem value="jobs">Jobs</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={handleExport} disabled={exportMutation.isPending} variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {kpis.map((kpi) => (
               <Card key={kpi.label} className="shadow-card">
