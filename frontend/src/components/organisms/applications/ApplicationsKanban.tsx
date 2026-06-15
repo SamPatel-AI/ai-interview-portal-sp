@@ -5,7 +5,7 @@ import { CheckCircle, Mail, Phone, ThumbsDown, ThumbsUp, XCircle } from 'lucide-
 import type { Application } from '@/domains/applications';
 import { APPLICATION_STATUS_LABELS } from '@/lib/constants';
 import {
-  APPLICATION_STATUSES,
+  
   canApproveForInterview,
   canMakeFinalDecision,
   candidateName,
@@ -24,10 +24,12 @@ interface Props {
   onShortlist: (id: string) => void;
 }
 
+const KANBAN_STATUSES = ['new', 'screening', 'shortlisted'] as const;
+
 export default function ApplicationsKanban({ apps, onOpenDetail, onInvite, onReject, onShortlist }: Props) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-      {APPLICATION_STATUSES.map((status) => {
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {KANBAN_STATUSES.map((status) => {
         const filtered = apps.filter(a => a.status === status);
         return (
           <div key={status} className="space-y-3">

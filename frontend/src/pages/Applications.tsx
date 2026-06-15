@@ -10,7 +10,9 @@ import CompanyFilterBar from '@/components/organisms/applications/CompanyFilterB
 import InviteDeadlineDialog from '@/components/organisms/applications/InviteDeadlineDialog';
 import Pagination from '@/components/molecules/Pagination';
 import { getScore } from '@/components/organisms/applications/applicationListHelpers';
-import { useApplications, useApproveInterview, useUpdateApplication } from '@/domains/applications';
+import { useApplications, useApproveInterview, useUpdateApplication, type Application } from '@/domains/applications';
+
+
 
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
@@ -24,7 +26,14 @@ export default function Applications() {
     new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   );
 
-  const { data, isLoading, error } = useApplications({ page });
+  // List view: full record, paginated, no status filter
+  const listQuery = useApplications({ page });
+
+  // Kanban view: only active statuses, fetched separately per status (no pagination UI)
+  const newQuery = useApplications({ status: 'new' });
+  const screeningQuery = useApplications({ status: 'screening' });
+  const shortlistedQuery = useApplications({ status: 'shortlisted' });
+
   const approveInterviewMutation = useApproveInterview();
   const updateStatusMutation = useUpdateApplication();
 
@@ -51,26 +60,42 @@ export default function Applications() {
     setPendingAppId(null);
   };
 
-  const allApps = [...(data?.data ?? [])].sort(
-    (a, b) => (getScore(b.ai_screening_score) ?? 0) - (getScore(a.ai_screening_score) ?? 0)
-  );
+  const sortByScore = (apps: Application[]) =>
+    [...apps].sort(
+      (a, b) => (getScore(b.ai_screening_score) ?? 0) - (getScore(a.ai_screening_score) ?? 0)
+    );
+
+  const listApps = sortByScore(listQuery.data?.data ?? []);
+  const activeApps = sortByScore([
+    ...(newQuery.data?.data ?? []),
+    ...(screeningQuery.data?.data ?? []),
+    ...(shortlistedQuery.data?.data ?? []),
+  ]);
+
+  const sourceApps = view === 'kanban' ? activeApps : listApps;
 
   const companies = useMemo(() => {
     const names = new Set<string>();
-    allApps.forEach((app) => {
+    sourceApps.forEach((app) => {
       const name = app.jobs?.client_companies?.name;
       if (name) names.add(name);
     });
     return Array.from(names).sort();
-  }, [allApps]);
+  }, [sourceApps]);
 
   const filteredApps = selectedCompany === 'all'
-    ? allApps
-    : allApps.filter((app) => app.jobs?.client_companies?.name === selectedCompany);
+    ? sourceApps
+    : sourceApps.filter((app) => app.jobs?.client_companies?.name === selectedCompany);
+
+  const isLoading = view === 'kanban'
+    ? newQuery.isLoading || screeningQuery.isLoading || shortlistedQuery.isLoading
+    : listQuery.isLoading;
+  const error = view === 'kanban'
+    ? newQuery.error || screeningQuery.error || shortlistedQuery.error
+    : listQuery.error;
 
   if (isLoading) return <TableSkeleton cols={6} />;
   if (error) return <EmptyState icon={ClipboardCheck} title="Failed to load applications" description={error instanceof Error ? error.message : 'An error occurred'} />;
-  if (allApps.length === 0) return <EmptyState icon={ClipboardCheck} title="No applications yet" description="Applications will appear here when candidates apply to your jobs." />;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -89,7 +114,11 @@ export default function Applications() {
       <CompanyFilterBar companies={companies} selected={selectedCompany} onSelect={setSelectedCompany} />
 
       {filteredApps.length === 0 ? (
-        <EmptyState icon={ClipboardCheck} title="No applications" description="No applications match the selected company filter." />
+        <EmptyState
+          icon={ClipboardCheck}
+          title={view === 'kanban' ? 'No active applications' : 'No applications'}
+          description={view === 'kanban' ? 'Active candidates (new, screening, shortlisted) will appear here.' : 'No applications match the selected company filter.'}
+        />
       ) : view === 'kanban' ? (
         <ApplicationsKanban
           apps={filteredApps}
@@ -108,17 +137,15 @@ export default function Applications() {
         />
       )}
 
-      {data && (
+      {view === 'table' && listQuery.data && (
         <Pagination
-          page={data.page ?? page}
-          limit={data.limit}
-          total={data.total}
-          totalPages={data.totalPages}
+          page={listQuery.data.page ?? page}
+          limit={listQuery.data.limit}
+          total={listQuery.data.total}
+          totalPages={listQuery.data.totalPages}
           onPageChange={setPage}
         />
       )}
-
-
 
       <InviteDeadlineDialog
         open={dialogOpen}
@@ -134,3 +161,4 @@ export default function Applications() {
     </div>
   );
 }
+

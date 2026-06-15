@@ -16,7 +16,7 @@ const navItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   { title: 'Candidates', url: '/candidates', icon: Users },
   { title: 'Jobs', url: '/jobs', icon: Briefcase },
-  { title: 'Applications', url: '/applications', icon: ClipboardList },
+  { title: 'Pipeline', url: '/applications', icon: ClipboardList },
   { title: 'AI Agents', url: '/agents', icon: Bot },
   { title: 'Calls', url: '/calls', icon: Phone },
   { title: 'Companies', url: '/companies', icon: Building2 },
