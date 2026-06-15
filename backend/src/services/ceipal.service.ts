@@ -139,14 +139,33 @@ async function fetchCeipalClients(token: string): Promise<CeipalClient[]> {
 }
 
 /**
+ * Total number of job postings (unfiltered). Used by the client-filter guard to
+ * detect if the `client=` filter is being ignored (returns the full set).
+ */
+async function fetchTotalJobCount(token: string): Promise<number> {
+  const r = await fetch('https://api.ceipal.com/v1/getJobPostingsList?page=1', {
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) return 0;
+  const data = (await r.json()) as { results?: unknown[]; count?: number };
+  return data.count ?? (data.results?.length || 0);
+}
+
+/**
  * Fetch the job codes belonging to one client via the `client` filter on
  * getJobPostingsList. This is the only CEIPAL API surface that exposes the
  * job->client link (the job-posting detail itself carries no client field).
+ * `client=` is UNDOCUMENTED but verified to filter; the caller guards against
+ * it being silently ignored (see syncCeipalClients).
  */
-async function fetchClientJobCodes(token: string, clientId: string): Promise<string[]> {
+async function fetchClientJobCodes(
+  token: string,
+  clientId: string,
+): Promise<{ codes: string[]; count: number }> {
   const codes: string[] = [];
   let page = 1;
   let numPages = 1;
+  let count = 0;
   do {
     // `client` must be the raw encoded id; verified that this param actually
     // filters the result set (other param names are silently ignored).
@@ -155,12 +174,17 @@ async function fetchClientJobCodes(token: string, clientId: string): Promise<str
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     });
     if (!response.ok) break; // a single client failing shouldn't abort the whole sync
-    const data = (await response.json()) as { results?: CeipalJob[]; num_pages?: number };
+    const data = (await response.json()) as {
+      results?: CeipalJob[];
+      num_pages?: number;
+      count?: number;
+    };
+    if (page === 1) count = data.count ?? (data.results?.length || 0);
     for (const j of data.results || []) if (j.job_code) codes.push(j.job_code);
     numPages = data.num_pages || 1;
     page += 1;
   } while (page <= numPages && page <= 50);
-  return codes;
+  return { codes, count };
 }
 
 /**
@@ -172,10 +196,20 @@ async function fetchClientJobCodes(token: string, clientId: string): Promise<str
 async function syncCeipalClients(
   orgId: string,
   token: string,
-): Promise<{ clientCount: number; jobCodeToClientId: Map<string, string> }> {
+): Promise<{
+  clientCount: number;
+  jobCodeToClientId: Map<string, string>;
+  filterIgnoredClients: number;
+}> {
   const clients = await fetchCeipalClients(token);
   const jobCodeToClientId = new Map<string, string>();
   let clientCount = 0;
+
+  // Guard baseline: how many jobs exist unfiltered. If a `client=`-filtered
+  // request returns this same total, the filter was ignored and we must NOT map
+  // (it would mislink every job to one client).
+  const totalJobs = await fetchTotalJobCount(token);
+  let filterIgnoredClients = 0;
 
   for (const c of clients) {
     if (!c.name) continue;
@@ -213,12 +247,17 @@ async function syncCeipalClients(
     if (!ourId) continue;
     clientCount++;
 
-    for (const code of await fetchClientJobCodes(token, c.id)) {
-      jobCodeToClientId.set(code, ourId);
+    const { codes, count } = await fetchClientJobCodes(token, c.id);
+    // Filter-ignored guard: a real client returns a subset; if it returns the
+    // entire job set, the `client=` param was dropped — skip to avoid mislinking.
+    if (totalJobs > 0 && count >= totalJobs) {
+      filterIgnoredClients++;
+      continue;
     }
+    for (const code of codes) jobCodeToClientId.set(code, ourId);
   }
 
-  return { clientCount, jobCodeToClientId };
+  return { clientCount, jobCodeToClientId, filterIgnoredClients };
 }
 
 /**
@@ -259,7 +298,15 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
   // Sync clients first and build job_code -> our client_company.id. CEIPAL only
   // exposes the job->client link via the `client` filter on the job list, so we
   // resolve it here once for every client and look it up per job below.
-  const { clientCount, jobCodeToClientId } = await syncCeipalClients(orgId, token);
+  const { clientCount, jobCodeToClientId, filterIgnoredClients } = await syncCeipalClients(
+    orgId,
+    token,
+  );
+  if (filterIgnoredClients > 0) {
+    logger.warn(
+      `CEIPAL client= filter appears unreliable: ${filterIgnoredClients} client(s) returned the full job set. Those jobs are left unassigned rather than mislinked.`,
+    );
+  }
 
   const ceipalJobs = await fetchCeipalJobs(token);
 
