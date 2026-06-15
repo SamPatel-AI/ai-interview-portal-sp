@@ -13,7 +13,7 @@ import { JOB_STATUS_COLORS } from '@/lib/constants';
 
 export default function Jobs() {
   const [search, setSearch] = useState('');
-  const [page] = useState(1);
+  const [page, setPage] = useState(1);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
