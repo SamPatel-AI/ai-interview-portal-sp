@@ -63,7 +63,10 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       `, { count: 'exact' })
       .eq('org_id', req.user!.org_id);
 
-    if (status) query = query.eq('status', status);
+    // Default to OPEN jobs so closed/filled CEIPAL history stays hidden.
+    // Pass ?status=all to see every status, or ?status=closed for a specific one.
+    if (status && status !== 'all') query = query.eq('status', status as string);
+    else if (!status) query = query.eq('status', 'open');
     if (company_id) query = query.eq('client_company_id', company_id);
     if (recruiter_id) query = query.eq('assigned_recruiter_id', recruiter_id);
     if (search) query = query.or(`title.ilike.%${search}%,ceipal_job_id.ilike.%${search}%`);

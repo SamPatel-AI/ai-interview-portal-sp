@@ -27,10 +27,13 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { search } = req.query;
 
+    // Count only OPEN jobs per company (embedded filter affects the embed only,
+    // so companies with no open jobs are still returned with jobs_count 0).
     let query = supabaseAdmin
       .from('client_companies')
       .select('*, jobs (id), ai_agents (id)', { count: 'exact' })
       .eq('org_id', req.user!.org_id)
+      .eq('jobs.status', 'open')
       .order('name');
 
     if (search) {
@@ -41,12 +44,15 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     if (error) throw new AppError(500, 'Failed to fetch companies');
 
-    // Add jobs_count and agents_count for the frontend
-    const enriched = (data ?? []).map(({ jobs, ai_agents, ...company }) => ({
-      ...company,
-      jobs_count: Array.isArray(jobs) ? jobs.length : 0,
-      agents_count: Array.isArray(ai_agents) ? ai_agents.length : 0,
-    }));
+    // Add jobs_count (open only) and agents_count, then sort highest → lowest
+    // so the busiest clients lead. Zero-job companies sort to the bottom.
+    const enriched = (data ?? [])
+      .map(({ jobs, ai_agents, ...company }) => ({
+        ...company,
+        jobs_count: Array.isArray(jobs) ? jobs.length : 0,
+        agents_count: Array.isArray(ai_agents) ? ai_agents.length : 0,
+      }))
+      .sort((a, b) => b.jobs_count - a.jobs_count || a.name.localeCompare(b.name));
 
     res.json({ success: true, data: enriched, total: count });
   } catch (err) {

@@ -346,6 +346,7 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
   updated: number;
   clients: number;
   linked: number;
+  skipped: number;
 }> {
   logger.info(`Starting CEIPAL sync for org ${orgId}`);
 
@@ -370,16 +371,18 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
   let created = 0;
   let updated = 0;
   let linked = 0;
+  let skipped = 0;
 
   for (const cJob of ceipalJobs) {
     const jobCode = cJob.job_code || '';
+    const status = mapJobStatus(cJob.job_status);
+    const isOpen = status === 'open';
     const description = cleanHtmlDescription(cJob.public_job_desc || cJob.requisition_description || '');
     const skills = cJob.skills ? cJob.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
 
     // Explicit override (clientCompanyId arg) wins; otherwise use the resolved
     // CEIPAL client. Falls back to null (unassigned) when the job has no client.
     const resolvedClientId = clientCompanyId || jobCodeToClientId.get(jobCode) || null;
-    if (resolvedClientId) linked++;
 
     const fields = {
       title: cJob.public_job_title || cJob.position_title,
@@ -390,7 +393,7 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
       country: cJob.country || null,
       tax_terms: cJob.tax_terms || null,
       employment_type: mapEmploymentType(cJob.employment_type),
-      status: mapJobStatus(cJob.job_status),
+      status,
       pay_rate: formatPayRate(cJob.pay_rates),
       // Keep the Business Unit id for reference; client linkage is client_company_id.
       ceipal_company_id: cJob.company != null ? String(cJob.company) : null,
@@ -407,23 +410,31 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
       .single();
 
     if (existing) {
+      // Always keep existing rows current (a job that closed gets status=closed
+      // and is then hidden by the open-only views).
       await supabaseAdmin.from('jobs').update(fields).eq('id', existing.id);
       updated++;
-    } else {
+      if (isOpen && resolvedClientId) linked++;
+    } else if (isOpen) {
+      // Only ingest OPEN postings — skip closed/filled/on-hold history so the
+      // pipeline tracks live reqs, not CEIPAL's full archive.
       await supabaseAdmin.from('jobs').insert({
         org_id: orgId,
         ceipal_job_id: jobCode,
         ...fields,
       });
       created++;
+      if (resolvedClientId) linked++;
+    } else {
+      skipped++;
     }
   }
 
   logger.info(
-    `CEIPAL sync complete: ${clientCount} clients, ${ceipalJobs.length} jobs found, ${created} created, ${updated} updated, ${linked} linked to a client`,
+    `CEIPAL sync complete: ${clientCount} clients, ${ceipalJobs.length} found, ${created} created, ${updated} updated, ${skipped} non-open skipped, ${linked} open jobs linked to a client`,
   );
 
-  return { synced: ceipalJobs.length, created, updated, clients: clientCount, linked };
+  return { synced: ceipalJobs.length, created, updated, clients: clientCount, linked, skipped };
 }
 
 /**
