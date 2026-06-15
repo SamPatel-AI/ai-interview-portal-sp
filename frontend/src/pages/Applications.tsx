@@ -108,6 +108,18 @@ export default function Applications() {
         />
       )}
 
+      {data && (
+        <Pagination
+          page={data.page ?? page}
+          limit={data.limit}
+          total={data.total}
+          totalPages={data.totalPages}
+          onPageChange={setPage}
+        />
+      )}
+
+
+
       <InviteDeadlineDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
