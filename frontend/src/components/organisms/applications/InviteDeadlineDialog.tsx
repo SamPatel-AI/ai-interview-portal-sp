@@ -70,7 +70,7 @@ export default function InviteDeadlineDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button onClick={onConfirm} disabled={isPending}>
+          <Button onClick={onConfirm} disabled={isPending || !selectedDate}>
             {isPending ? 'Sending…' : 'Send Invitation'}
           </Button>
         </DialogFooter>

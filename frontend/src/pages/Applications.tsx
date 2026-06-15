@@ -29,9 +29,10 @@ export default function Applications() {
   // List view: full record, paginated, no status filter
   const listQuery = useApplications({ page });
 
-  // Kanban view: only active statuses, fetched separately per status (no pagination UI)
+  // Kanban view: fetch all statuses that can appear on the board (rejected/hired hidden)
   const newQuery = useApplications({ status: 'new' });
   const screeningQuery = useApplications({ status: 'screening' });
+  const interviewedQuery = useApplications({ status: 'interviewed' });
   const shortlistedQuery = useApplications({ status: 'shortlisted' });
 
   const approveInterviewMutation = useApproveInterview();
@@ -49,8 +50,8 @@ export default function Applications() {
   };
 
   const handleConfirmInvite = () => {
-    if (!pendingAppId) return;
-    approveInterviewMutation.mutate({ id: pendingAppId, deadline: selectedDate?.toISOString() });
+    if (!pendingAppId || !selectedDate) return;
+    approveInterviewMutation.mutate({ id: pendingAppId, deadline: selectedDate.toISOString() });
     setDialogOpen(false);
     setPendingAppId(null);
   };
@@ -69,6 +70,7 @@ export default function Applications() {
   const activeApps = sortByScore([
     ...(newQuery.data?.data ?? []),
     ...(screeningQuery.data?.data ?? []),
+    ...(interviewedQuery.data?.data ?? []),
     ...(shortlistedQuery.data?.data ?? []),
   ]);
 
@@ -88,10 +90,10 @@ export default function Applications() {
     : sourceApps.filter((app) => app.jobs?.client_companies?.name === selectedCompany);
 
   const isLoading = view === 'kanban'
-    ? newQuery.isLoading || screeningQuery.isLoading || shortlistedQuery.isLoading
+    ? newQuery.isLoading || screeningQuery.isLoading || interviewedQuery.isLoading || shortlistedQuery.isLoading
     : listQuery.isLoading;
   const error = view === 'kanban'
-    ? newQuery.error || screeningQuery.error || shortlistedQuery.error
+    ? newQuery.error || screeningQuery.error || interviewedQuery.error || shortlistedQuery.error
     : listQuery.error;
 
   if (isLoading) return <TableSkeleton cols={6} />;
