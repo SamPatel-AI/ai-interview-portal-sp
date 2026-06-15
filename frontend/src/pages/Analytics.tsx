@@ -7,7 +7,8 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tool
 import { StatsSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import { Button } from '@/components/ui/button';
-import { useOverview, useRecruiterStats, useAgentStats, useExportReport } from '@/domains/analytics';
+import { useOverview, useRecruiterStats, useAgentStats, useExportReport, useRecruiterWorkload } from '@/domains/analytics';
+import RecruiterWorkloadTab from '@/components/organisms/analytics/RecruiterWorkloadTab';
 import { useAgents } from '@/domains/agents';
 import { useAuthMe } from '@/domains/auth';
 
@@ -22,6 +23,7 @@ export default function Analytics() {
   const { data: agentsData } = useAgents();
   const { data: agentStatsData } = useAgentStats(selectedAgentId || null);
   const exportMutation = useExportReport();
+  const { data: workloadData } = useRecruiterWorkload();
 
   const handleExport = () => exportMutation.mutate(exportType);
 
@@ -48,7 +50,8 @@ export default function Analytics() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="recruiter">Recruiter Performance</TabsTrigger>
+          <TabsTrigger value="workload">Recruiter Workload</TabsTrigger>
+          <TabsTrigger value="recruiter">My Performance</TabsTrigger>
           <TabsTrigger value="agent">Agent Performance</TabsTrigger>
         </TabsList>
 
@@ -141,6 +144,10 @@ export default function Analytics() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="workload" className="mt-6">
+          <RecruiterWorkloadTab data={workloadData ?? []} />
         </TabsContent>
 
         <TabsContent value="recruiter" className="mt-6 space-y-6">
