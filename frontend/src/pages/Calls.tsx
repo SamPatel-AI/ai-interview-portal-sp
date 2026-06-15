@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import CallDetailSheet from '@/components/organisms/calls/CallDetailSheet';
+import Pagination from '@/components/molecules/Pagination';
 import { useCalls, useInitiateCall, useScheduleCall } from '@/domains/calls';
 import { useApplications } from '@/domains/applications';
 
@@ -45,6 +46,7 @@ const formatDuration = (seconds: number | null) => {
 
 export default function Calls() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [callNowOpen, setCallNowOpen] = useState(false);
@@ -52,7 +54,7 @@ export default function Calls() {
   const [appId, setAppId] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
 
-  const { data, isLoading, error } = useCalls();
+  const { data, isLoading, error } = useCalls({ page });
   const callNowMutation = useInitiateCall();
   const scheduleMutation = useScheduleCall();
 
@@ -74,7 +76,7 @@ export default function Calls() {
       <div className="flex items-center justify-between gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search calls..." className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder="Search calls..." className="pl-8" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setScheduleOpen(true)}><Clock className="h-4 w-4 mr-2" />Schedule</Button>
@@ -143,6 +145,18 @@ export default function Calls() {
           </CardContent>
         </Card>
       )}
+
+      {data && (
+        <Pagination
+          page={data.page ?? page}
+          limit={data.limit}
+          total={data.total}
+          totalPages={data.totalPages}
+          onPageChange={setPage}
+        />
+      )}
+
+
 
       <CallDetailSheet callId={selectedCallId} open={sheetOpen} onOpenChange={setSheetOpen} />
 

@@ -7,6 +7,7 @@ import { Search, Users } from 'lucide-react';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import CandidateDetailSheet from '@/components/organisms/candidates/CandidateDetailSheet';
+import Pagination from '@/components/molecules/Pagination';
 import { useCandidates } from '@/domains/candidates';
 
 const sourceBadgeVariant = (source: string | null) => {
@@ -19,7 +20,7 @@ const sourceBadgeVariant = (source: string | null) => {
 
 export default function Candidates() {
   const [search, setSearch] = useState('');
-  const [page] = useState(1);
+  const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -28,13 +29,14 @@ export default function Candidates() {
   const candidates = data?.data ?? [];
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   const openDetail = (id: string) => { setSelectedId(id); setSheetOpen(true); };
+  const handleSearchChange = (v: string) => { setSearch(v); setPage(1); };
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search candidates..." className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder="Search candidates..." className="pl-8" value={search} onChange={(e) => handleSearchChange(e.target.value)} />
         </div>
       </div>
 
@@ -74,6 +76,17 @@ export default function Candidates() {
           </CardContent>
         </Card>
       )}
+
+      {data && (
+        <Pagination
+          page={data.page ?? page}
+          limit={data.limit}
+          total={data.total}
+          totalPages={data.totalPages}
+          onPageChange={setPage}
+        />
+      )}
+
 
       <CandidateDetailSheet candidateId={selectedId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>

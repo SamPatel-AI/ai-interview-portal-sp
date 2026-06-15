@@ -8,11 +8,13 @@ import ApplicationsKanban from '@/components/organisms/applications/Applications
 import ApplicationsTable from '@/components/organisms/applications/ApplicationsTable';
 import CompanyFilterBar from '@/components/organisms/applications/CompanyFilterBar';
 import InviteDeadlineDialog from '@/components/organisms/applications/InviteDeadlineDialog';
+import Pagination from '@/components/molecules/Pagination';
 import { getScore } from '@/components/organisms/applications/applicationListHelpers';
 import { useApplications, useApproveInterview, useUpdateApplication } from '@/domains/applications';
 
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
+  const [page, setPage] = useState(1);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
@@ -22,7 +24,7 @@ export default function Applications() {
     new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   );
 
-  const { data, isLoading, error } = useApplications({ page: 1 });
+  const { data, isLoading, error } = useApplications({ page });
   const approveInterviewMutation = useApproveInterview();
   const updateStatusMutation = useUpdateApplication();
 
@@ -105,6 +107,18 @@ export default function Applications() {
           onShortlist={handleShortlist}
         />
       )}
+
+      {data && (
+        <Pagination
+          page={data.page ?? page}
+          limit={data.limit}
+          total={data.total}
+          totalPages={data.totalPages}
+          onPageChange={setPage}
+        />
+      )}
+
+
 
       <InviteDeadlineDialog
         open={dialogOpen}

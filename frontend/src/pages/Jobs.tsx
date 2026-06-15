@@ -7,12 +7,13 @@ import { Search, RefreshCw, Briefcase, Loader2 } from 'lucide-react';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import JobDetailSheet from '@/components/organisms/jobs/JobDetailSheet';
+import Pagination from '@/components/molecules/Pagination';
 import { useJobs, useSyncCeipal } from '@/domains/jobs';
 import { JOB_STATUS_COLORS } from '@/lib/constants';
 
 export default function Jobs() {
   const [search, setSearch] = useState('');
-  const [page] = useState(1);
+  const [page, setPage] = useState(1);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -27,7 +28,7 @@ export default function Jobs() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search jobs..." className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder="Search jobs..." className="pl-8" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
@@ -79,6 +80,17 @@ export default function Jobs() {
           </CardContent>
         </Card>
       )}
+
+      {data && (
+        <Pagination
+          page={data.page ?? page}
+          limit={data.limit}
+          total={data.total}
+          totalPages={data.totalPages}
+          onPageChange={setPage}
+        />
+      )}
+
 
       <JobDetailSheet jobId={selectedJobId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
