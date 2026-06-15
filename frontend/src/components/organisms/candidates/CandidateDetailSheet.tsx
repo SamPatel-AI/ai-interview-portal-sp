@@ -63,6 +63,13 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
 
   const c = data?.data;
 
+  const latestScreening = useMemo(() => {
+    if (!c?.applications?.length) return null;
+    const latest = [...c.applications].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    return latest.ai_screening_result ?? null;
+  }, [c?.applications]);
+
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
