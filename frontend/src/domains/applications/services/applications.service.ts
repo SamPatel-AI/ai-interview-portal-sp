@@ -1,10 +1,14 @@
 import { apiRequest, type ApiResponse } from '@/lib/api';
 import type { Application, ApplicationDetail, CreateApplicationInput } from '../types';
 
-export async function fetchApplications(params: { page?: number; limit?: number; job_id?: string; status?: string; recruiter_id?: string; candidate_id?: string } = {}) {
+export async function fetchApplications(params: { page?: number; limit?: number; job_id?: string; status?: string; pipeline_stage?: string; recruiter_id?: string; candidate_id?: string } = {}) {
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => { if (v) qs.set(k, String(v)); });
   return apiRequest<ApiResponse<Application[]>>(`/api/applications?${qs}`);
+}
+
+export async function resendInvitation(id: string) {
+  return apiRequest<ApiResponse<{ message: string }>>(`/api/applications/${id}/resend-invitation`, { method: 'POST' });
 }
 
 export async function fetchApplication(id: string) {

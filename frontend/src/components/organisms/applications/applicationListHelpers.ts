@@ -56,30 +56,13 @@ export const canApproveForInterview = (status: string) => ['new', 'screening'].i
 export const canMakeFinalDecision = (status: string) => status === 'interviewed';
 
 export type AppPhase =
-  | { key: 'interviewed'; label: 'Interviewed ✓'; tone: 'success' }
-  | { key: 'no_answer'; label: 'No Answer'; tone: 'warning' }
-  | { key: 'disconnected'; label: 'Call Disconnected'; tone: 'destructive' }
-  | { key: 'booked'; label: 'Slot Booked'; tone: 'info' }
-  | { key: 'email_sent'; label: 'Email Sent'; tone: 'muted' };
-
-export function computePhase(app: Application): AppPhase | null {
-  const calls = app.calls ?? [];
-  if (calls.some(c => c.status === 'completed')) {
-    return { key: 'interviewed', label: 'Interviewed ✓', tone: 'success' };
-  }
-  if (calls.length > 0) {
-    const latest = [...calls].sort(
-      (a, b) => new Date(b.started_at || 0).getTime() - new Date(a.started_at || 0).getTime()
-    )[0];
-    if (latest.status === 'no_answer') return { key: 'no_answer', label: 'No Answer', tone: 'warning' };
-    if (latest.status === 'failed' || latest.status === 'interrupted')
-      return { key: 'disconnected', label: 'Call Disconnected', tone: 'destructive' };
-    if (latest.status === 'scheduled' || latest.status === 'in_progress')
-      return { key: 'booked', label: 'Slot Booked', tone: 'info' };
-  }
-  if (app.invitation_sent) return { key: 'email_sent', label: 'Email Sent', tone: 'muted' };
-  return null;
-}
+  | { key: 'interviewed'; label: string; tone: 'success' }
+  | { key: 'no_answer'; label: string; tone: 'warning' }
+  | { key: 'disconnected'; label: string; tone: 'destructive' }
+  | { key: 'booked'; label: string; tone: 'info' }
+  | { key: 'email_sent'; label: string; tone: 'muted' }
+  | { key: 'retrying'; label: string; tone: 'warning' }
+  | { key: 'failed'; label: string; tone: 'destructive' };
 
 export const phaseClasses = (tone: AppPhase['tone']) => {
   switch (tone) {
@@ -90,3 +73,34 @@ export const phaseClasses = (tone: AppPhase['tone']) => {
     default: return 'bg-muted text-muted-foreground border-muted';
   }
 };
+
+export function subStatusBadge(app: Application): AppPhase | null {
+  const sub = app.sub_status ?? '';
+  if (sub === 'invited') return { key: 'email_sent', label: 'Email Sent', tone: 'muted' };
+  if (sub === 'booked') return { key: 'booked', label: 'Slot Booked', tone: 'info' };
+  if (sub === 'retrying') {
+    const n = app.calls?.length ?? 0;
+    return { key: 'retrying', label: `Retrying (${n}/3)`, tone: 'warning' };
+  }
+  if (sub === 'no_answer') return { key: 'no_answer', label: 'No Answer', tone: 'warning' };
+  if (sub === 'disconnected') return { key: 'disconnected', label: 'Call Disconnected', tone: 'destructive' };
+  return null;
+}
+
+export function failedAttempts(app: Application): number {
+  const m = (app.sub_status ?? '').match(/failed_(\d+)/);
+  if (m) return parseInt(m[1], 10);
+  return app.calls?.length ?? 0;
+}
+
+export const PIPELINE_STAGE_LABELS: Record<string, string> = {
+  new: 'New',
+  in_progress: 'In Progress',
+  interviewed: 'Interviewed',
+  failed: 'Failed',
+  shortlisted: 'Shortlisted',
+  archived: 'Archived',
+};
+
+export const humanizeStage = (stage: string | null | undefined) =>
+  stage ? PIPELINE_STAGE_LABELS[stage] ?? stage : '—';

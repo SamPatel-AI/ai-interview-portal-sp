@@ -1,9 +1,13 @@
+export type PipelineStage = 'new' | 'in_progress' | 'interviewed' | 'failed' | 'shortlisted' | 'archived';
+
 export interface Application {
   id: string;
   org_id: string;
   candidate_id: string;
   job_id: string;
   status: 'new' | 'screening' | 'interviewed' | 'shortlisted' | 'rejected' | 'hired';
+  pipeline_stage: PipelineStage;
+  sub_status: string | null;
   ai_screening_score: number | null;
   ai_screening_result: Record<string, unknown> | null;
   mandate_questions: string[] | null;
@@ -14,7 +18,7 @@ export interface Application {
   created_at: string;
   updated_at: string;
   candidates?: { id: string; first_name: string; last_name: string; email: string; phone?: string };
-  jobs?: { id: string; title: string; client_company_id?: string; status: string; client_companies?: { id: string; name: string } };
+  jobs?: { id: string; title: string; client_company_id?: string; status: string; interview_deadline?: string | null; client_companies?: { id: string; name: string } };
   calls?: { id: string; status: string; disconnection_reason: string | null; started_at: string | null }[];
 }
 

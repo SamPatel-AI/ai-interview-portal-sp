@@ -21,6 +21,7 @@ interface Props {
   onConfirm: () => void;
   onCancel: () => void;
   isPending: boolean;
+  title?: string;
 }
 
 export default function InviteDeadlineDialog({
@@ -31,12 +32,13 @@ export default function InviteDeadlineDialog({
   onConfirm,
   onCancel,
   isPending,
+  title,
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Set Interview Deadline</DialogTitle>
+          <DialogTitle>{title ?? 'Set Interview Deadline'}</DialogTitle>
           <DialogDescription>
             Select the last date by which the candidate must book their screening call. The Cal.com booking link will only show slots up to this date.
           </DialogDescription>
