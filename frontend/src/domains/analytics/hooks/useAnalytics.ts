@@ -28,6 +28,14 @@ export function useRecruiterWorkloads() {
   });
 }
 
+export function useRecruiterWorkload() {
+  return useQuery({
+    queryKey: analyticsKeys.recruiters(),
+    queryFn: () => service.getRecruiterWorkload(),
+    staleTime: STALE.MEDIUM,
+  });
+}
+
 export function useJobStats(id: string | null) {
   return useQuery({
     queryKey: analyticsKeys.job(id!),
