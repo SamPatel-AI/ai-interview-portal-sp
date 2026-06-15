@@ -1,3 +1,15 @@
-export { useOverview, useRecruiterStats, useRecruiterWorkloads, useJobStats, useAgentStats } from './hooks/useAnalytics';
+export { useOverview, useRecruiterStats, useRecruiterWorkloads, useJobStats, useAgentStats, useExportReport } from './hooks/useAnalytics';
 export { analyticsKeys } from './hooks/queryKeys';
-export type { OverviewStats, RecruiterStats, RecruiterWorkload } from './types';
+export type {
+  OverviewStats,
+  RecruiterStats,
+  RecruiterWorkload,
+  AgentStats,
+  PipelineStage,
+  TopJob,
+  ScheduledCall,
+  RecentActivityItem,
+  ChartPoint,
+  CallOutcome,
+  AppByStatus,
+} from './types';

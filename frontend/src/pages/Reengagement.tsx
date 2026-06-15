@@ -10,8 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Zap, ChevronLeft, ChevronRight, Check, X } from 'lucide-react';
 import EmptyState from '@/components/molecules/EmptyState';
 import { useReengagementCampaigns, useReengagementCampaign, useTriggerCampaign } from '@/domains/reengagement';
-import type { ReengagementCampaign } from '@/domains/reengagement';
+import type { ReengagementCampaign, ReengagementCandidate } from '@/domains/reengagement';
 import { useJobs } from '@/domains/jobs';
+import type { Job } from '@/domains/jobs';
 import { REENGAGEMENT_STATUS_COLORS } from '@/lib/constants';
 
 export default function Reengagement() {
@@ -25,12 +26,12 @@ export default function Reengagement() {
   const { data: jobsResponse } = useJobs({ status: 'open' });
   const trigger = useTriggerCampaign();
 
-  const raw = (response as any)?.data;
-  const campaigns: ReengagementCampaign[] = Array.isArray(raw) ? raw : (raw?.campaigns || []);
-  const totalPages = (response as any)?.totalPages || 1;
+  const raw = response?.data;
+  const campaigns: ReengagementCampaign[] = Array.isArray(raw) ? raw : (raw?.campaigns ?? []);
+  const totalPages = response?.totalPages ?? 1;
 
-  const jobs = (jobsResponse as any)?.data || [];
-  const detail = (detailResponse as any)?.data;
+  const jobs: Job[] = jobsResponse?.data ?? [];
+  const detail = detailResponse?.data;
 
   const handleLaunch = async () => {
     if (!selectedJob) return;
@@ -124,7 +125,7 @@ export default function Reengagement() {
             <Select value={selectedJob} onValueChange={setSelectedJob}>
               <SelectTrigger><SelectValue placeholder="Select an open job" /></SelectTrigger>
               <SelectContent>
-                {jobs.map((j: any) => (
+                {jobs.map((j) => (
                   <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>
                 ))}
               </SelectContent>
@@ -184,7 +185,7 @@ export default function Reengagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(detail.candidates || []).map((c: any, i: number) => (
+                      {(detail.candidates ?? []).map((c: ReengagementCandidate, i: number) => (
                         <TableRow key={i}>
                           <TableCell>
                             <p className="font-medium">{c.candidate_name}</p>

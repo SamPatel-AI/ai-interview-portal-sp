@@ -1,5 +1,5 @@
 import { apiRequest, type ApiResponse } from '@/lib/api';
-import type { Application, CreateApplicationInput } from '../types';
+import type { Application, ApplicationDetail, CreateApplicationInput } from '../types';
 
 export async function fetchApplications(params: { page?: number; limit?: number; job_id?: string; status?: string; recruiter_id?: string; candidate_id?: string } = {}) {
   const qs = new URLSearchParams();
@@ -8,7 +8,7 @@ export async function fetchApplications(params: { page?: number; limit?: number;
 }
 
 export async function fetchApplication(id: string) {
-  return apiRequest<ApiResponse<Application>>(`/api/applications/${id}`);
+  return apiRequest<ApiResponse<ApplicationDetail>>(`/api/applications/${id}`);
 }
 
 export async function createApplication(input: CreateApplicationInput) {

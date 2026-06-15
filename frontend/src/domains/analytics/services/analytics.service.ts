@@ -1,5 +1,5 @@
 import { apiRequest, type ApiResponse } from '@/lib/api';
-import type { OverviewStats, RecruiterStats, RecruiterWorkload } from '../types';
+import type { OverviewStats, RecruiterStats, RecruiterWorkload, AgentStats } from '../types';
 
 export async function fetchOverview() {
   return apiRequest<ApiResponse<OverviewStats>>('/api/analytics/overview');
@@ -14,13 +14,18 @@ export async function fetchRecruiterWorkloads() {
 }
 
 export async function fetchJobStats(id: string) {
-  return apiRequest<ApiResponse<unknown>>(`/api/analytics/job/${id}`);
+  return apiRequest<ApiResponse<Record<string, unknown>>>(`/api/analytics/job/${id}`);
 }
 
 export async function fetchAgentStats(id: string) {
-  return apiRequest<ApiResponse<unknown>>(`/api/analytics/agent/${id}`);
+  return apiRequest<ApiResponse<AgentStats>>(`/api/analytics/agent/${id}`);
 }
 
 export async function exportData(type: 'candidates' | 'applications' | 'calls' | 'jobs') {
   return apiRequest<string>(`/api/reports/export?type=${type}`);
 }
+
+export async function exportReport(type: string) {
+  return apiRequest<Blob>(`/api/reports/export?type=${type}`, { responseType: 'blob' });
+}
+

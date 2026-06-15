@@ -2,61 +2,18 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Users, Phone, Star, TrendingUp, Download, Briefcase, ClipboardList, PhoneCall } from 'lucide-react';
+import { Download, Users, Phone, Star, TrendingUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { StatsSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
-import { useQuery } from '@tanstack/react-query';
-import { useOverview, useRecruiterStats, useAgentStats } from '@/domains/analytics';
+import { Button } from '@/components/ui/button';
+import { useOverview, useRecruiterStats, useAgentStats, useExportReport } from '@/domains/analytics';
 import { useAgents } from '@/domains/agents';
 import { useAuthMe } from '@/domains/auth';
-import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/api';
-
-interface RecruiterWorkload {
-  id: string;
-  full_name: string;
-  email: string;
-  open_applications: number;
-  total_calls: number;
-  pending_evaluations: number;
-}
 
 export default function Analytics() {
   const [selectedAgentId, setSelectedAgentId] = useState('');
-  const { toast } = useToast();
-
-  // Recruiter workload
-  const { data: workloadData } = useQuery({
-    queryKey: ['analytics-workload'],
-    queryFn: () => apiRequest<ApiResponse<RecruiterWorkload[]>>('/api/analytics/recruiters'),
-  });
-
-  const workload: RecruiterWorkload[] = (workloadData as any)?.data || [];
-
-  // CSV Export
-  const handleExport = async (type: string) => {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/reports/export?type=${type}`, {
-        headers: {
-          'Authorization': `Bearer ${(await (await import('@/lib/supabase')).supabase.auth.getSession()).data.session?.access_token}`,
-        },
-      });
-      if (!response.ok) throw new Error('Export failed');
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${type}-export-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast({ title: 'Export downloaded' });
-    } catch (e: any) {
-      toast({ title: 'Export failed', description: e.message, variant: 'destructive' });
-    }
-  };
+  const [exportType, setExportType] = useState('candidates');
 
   const { data, isLoading, error } = useOverview();
   const { data: meData } = useAuthMe();
@@ -64,11 +21,14 @@ export default function Analytics() {
   const { data: recruiterData } = useRecruiterStats(recruiterId ?? null);
   const { data: agentsData } = useAgents();
   const { data: agentStatsData } = useAgentStats(selectedAgentId || null);
+  const exportMutation = useExportReport();
+
+  const handleExport = () => exportMutation.mutate(exportType);
 
   if (isLoading) return <div className="space-y-6"><StatsSkeleton /></div>;
   if (error) return <EmptyState title="Failed to load analytics" description={error instanceof Error ? error.message : 'An error occurred'} />;
 
-  const overview = data?.data as any;
+  const overview = data?.data;
   const kpis = [
     { label: 'Total Candidates', value: overview?.total_candidates?.toLocaleString() ?? '0', icon: Users },
     { label: 'Total Calls', value: overview?.total_calls?.toLocaleString() ?? '0', icon: Phone },
@@ -79,31 +39,39 @@ export default function Analytics() {
   const callsOverTime = overview?.calls_over_time ?? [];
   const callOutcomes = overview?.call_outcomes ?? [];
   const appsByStatus = overview?.apps_by_status ?? [];
-  const rStats = recruiterData?.data as any;
-  const aStats = agentStatsData?.data as any;
+  const rStats = recruiterData?.data;
+  const aStats = agentStatsData?.data;
   const agents = agentsData?.data ?? [];
 
   return (
     <div className="space-y-6 animate-fade-in">
       <Tabs defaultValue="overview">
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="workload">Recruiter Workload</TabsTrigger>
-            <TabsTrigger value="recruiter">My Performance</TabsTrigger>
-            <TabsTrigger value="agent">Agent Performance</TabsTrigger>
-          </TabsList>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleExport('applications')}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />Applications CSV
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => handleExport('calls')}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />Calls CSV
-            </Button>
-          </div>
-        </div>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="recruiter">Recruiter Performance</TabsTrigger>
+          <TabsTrigger value="agent">Agent Performance</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-6">
+          <div className="flex justify-end">
+            <div className="flex items-center gap-2">
+              <Select value={exportType} onValueChange={setExportType}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="candidates">Candidates</SelectItem>
+                  <SelectItem value="applications">Applications</SelectItem>
+                  <SelectItem value="calls">Calls</SelectItem>
+                  <SelectItem value="jobs">Jobs</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={handleExport} disabled={exportMutation.isPending} variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {kpis.map((kpi) => (
               <Card key={kpi.label} className="shadow-card">
@@ -146,7 +114,7 @@ export default function Analytics() {
                     <ResponsiveContainer width="100%" height={250}>
                       <PieChart>
                         <Pie data={callOutcomes} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                          {callOutcomes.map((entry: any, i: number) => <Cell key={i} fill={entry.color} />)}
+                          {callOutcomes.map((entry, i: number) => <Cell key={i} fill={entry.color} />)}
                         </Pie>
                         <Tooltip />
                         <Legend />
@@ -172,63 +140,6 @@ export default function Analytics() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="workload" className="mt-6 space-y-6">
-          {workload.length > 0 ? (
-            <>
-              <Card className="shadow-card">
-                <CardHeader><CardTitle className="text-base">Recruiter Workload Comparison</CardTitle></CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={workload} layout="vertical" margin={{ left: 100 }}>
-                      <XAxis type="number" tick={{ fontSize: 12 }} />
-                      <YAxis type="category" dataKey="full_name" tick={{ fontSize: 12 }} width={100} />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="open_applications" name="Open Applications" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                      <Bar dataKey="total_calls" name="Total Calls" fill="hsl(210, 60%, 60%)" radius={[0, 4, 4, 0]} />
-                      <Bar dataKey="pending_evaluations" name="Pending Reviews" fill="hsl(40, 80%, 55%)" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {workload.map((r) => (
-                  <Card key={r.id} className="shadow-card">
-                    <CardContent className="p-5 space-y-3">
-                      <div>
-                        <p className="font-medium text-foreground">{r.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{r.email}</p>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div>
-                          <Briefcase className="h-4 w-4 mx-auto text-primary mb-1" />
-                          <p className="text-lg font-bold">{r.open_applications}</p>
-                          <p className="text-[10px] text-muted-foreground">Applications</p>
-                        </div>
-                        <div>
-                          <PhoneCall className="h-4 w-4 mx-auto text-blue-500 mb-1" />
-                          <p className="text-lg font-bold">{r.total_calls}</p>
-                          <p className="text-[10px] text-muted-foreground">Calls</p>
-                        </div>
-                        <div>
-                          <ClipboardList className="h-4 w-4 mx-auto text-amber-500 mb-1" />
-                          <p className="text-lg font-bold">{r.pending_evaluations}</p>
-                          <p className="text-[10px] text-muted-foreground">Pending</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </>
-          ) : (
-            <Card className="shadow-card"><CardContent className="p-12 text-center">
-              <p className="text-muted-foreground">No recruiter data available</p>
-            </CardContent></Card>
           )}
         </TabsContent>
 
@@ -311,7 +222,7 @@ export default function Analytics() {
                     <ResponsiveContainer width="100%" height={250}>
                       <PieChart>
                         <Pie data={aStats.calls_by_status} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                          {aStats.calls_by_status.map((_: any, i: number) => (
+                          {aStats.calls_by_status.map((_, i: number) => (
                             <Cell key={i} fill={['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--destructive))', 'hsl(var(--info))'][i % 5]} />
                           ))}
                         </Pie>

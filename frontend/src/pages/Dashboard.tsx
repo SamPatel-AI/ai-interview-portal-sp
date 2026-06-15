@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { DashboardSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import { useOverview } from '@/domains/analytics';
+import type { RecentActivityItem, PipelineStage } from '@/domains/analytics';
 
 const pipelineColors: Record<string, string> = {
   New: 'bg-info',
@@ -43,7 +44,7 @@ export default function Dashboard() {
     );
   }
 
-  const overview = data.data as any;
+  const overview = data.data;
 
   const stats = [
     { label: 'Total Candidates', value: overview.total_candidates?.toLocaleString() ?? '0', icon: Users },
@@ -52,15 +53,15 @@ export default function Dashboard() {
     { label: 'Pending Reviews', value: String(overview.pending_reviews ?? 0), icon: ClipboardCheck },
   ];
 
-  const recentActivity = (overview.recent_activity ?? []).map((item: any) => ({
+  const recentActivity = (overview.recent_activity ?? []).map((item: RecentActivityItem) => ({
     user: item.users?.full_name || item.user || 'System',
     action: `${formatAction(item.action)}${item.details?.candidate ? ` — ${item.details.candidate}` : ''}${item.details?.email ? ` (${item.details.email})` : ''}`,
     time: item.created_at ? new Date(item.created_at).toLocaleString() : '',
   }));
   const scheduledCalls = overview.scheduled_calls ?? [];
   const topJobs = overview.top_jobs ?? [];
-  const pipeline = overview.pipeline ?? overview.application_stats ?? [];
-  const maxPipeline = pipeline.length > 0 ? Math.max(...pipeline.map((p: any) => p.count || 0), 1) : 1;
+  const pipeline: PipelineStage[] = overview.pipeline ?? overview.application_stats ?? [];
+  const maxPipeline = pipeline.length > 0 ? Math.max(...pipeline.map((p) => p.count || 0), 1) : 1;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -91,7 +92,7 @@ export default function Dashboard() {
                 <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
               ) : (
                 <div className="space-y-4">
-                  {recentActivity.map((item: any, i: number) => (
+                  {recentActivity.map((item, i: number) => (
                     <div key={i} className="flex items-start gap-3">
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                         <span className="text-xs font-medium text-primary">{item.user[0]}</span>
@@ -112,7 +113,7 @@ export default function Dashboard() {
               <CardHeader><CardTitle className="text-base">Application Pipeline</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {pipeline.map((stage: any) => (
+                  {pipeline.map((stage) => (
                     <div key={stage.stage} className="flex items-center gap-3">
                       <span className="text-sm text-muted-foreground w-24 shrink-0">{stage.stage}</span>
                       <div className="flex-1 bg-muted rounded-full h-6 overflow-hidden">
@@ -139,7 +140,7 @@ export default function Dashboard() {
                 <p className="text-sm text-muted-foreground text-center py-6">No upcoming interviews</p>
               ) : (
                 <div className="space-y-3">
-                  {scheduledCalls.map((call: any, i: number) => (
+                  {scheduledCalls.map((call, i: number) => (
                     <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{call.candidate}</p>
