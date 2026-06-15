@@ -54,3 +54,39 @@ export const formatShortDate = (d: string) =>
 
 export const canApproveForInterview = (status: string) => ['new', 'screening'].includes(status);
 export const canMakeFinalDecision = (status: string) => status === 'interviewed';
+
+export type AppPhase =
+  | { key: 'interviewed'; label: 'Interviewed ✓'; tone: 'success' }
+  | { key: 'no_answer'; label: 'No Answer'; tone: 'warning' }
+  | { key: 'disconnected'; label: 'Call Disconnected'; tone: 'destructive' }
+  | { key: 'booked'; label: 'Slot Booked'; tone: 'info' }
+  | { key: 'email_sent'; label: 'Email Sent'; tone: 'muted' };
+
+export function computePhase(app: Application): AppPhase | null {
+  const calls = app.calls ?? [];
+  if (calls.some(c => c.status === 'completed')) {
+    return { key: 'interviewed', label: 'Interviewed ✓', tone: 'success' };
+  }
+  if (calls.length > 0) {
+    const latest = [...calls].sort(
+      (a, b) => new Date(b.started_at || 0).getTime() - new Date(a.started_at || 0).getTime()
+    )[0];
+    if (latest.status === 'no_answer') return { key: 'no_answer', label: 'No Answer', tone: 'warning' };
+    if (latest.status === 'failed' || latest.status === 'interrupted')
+      return { key: 'disconnected', label: 'Call Disconnected', tone: 'destructive' };
+    if (latest.status === 'scheduled' || latest.status === 'in_progress')
+      return { key: 'booked', label: 'Slot Booked', tone: 'info' };
+  }
+  if (app.invitation_sent) return { key: 'email_sent', label: 'Email Sent', tone: 'muted' };
+  return null;
+}
+
+export const phaseClasses = (tone: AppPhase['tone']) => {
+  switch (tone) {
+    case 'success': return 'bg-success/10 text-success border-success/20';
+    case 'warning': return 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20';
+    case 'destructive': return 'bg-destructive/10 text-destructive border-destructive/20';
+    case 'info': return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
+    default: return 'bg-muted text-muted-foreground border-muted';
+  }
+};
