@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { derivePipelineStage } from '../utils/pipelineStage';
 import '../types';
 
 const router = Router();
@@ -69,11 +70,16 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     if (error) throw new AppError(500, 'Failed to fetch applications');
 
-    const enriched = (data ?? []).map((a: any) => ({
-      ...a,
-      invitation_sent: (a.email_logs?.[0]?.count ?? 0) > 0,
-      email_logs: undefined,
-    }));
+    const enriched = (data ?? []).map((a: any) => {
+      const invitation_sent = (a.email_logs?.[0]?.count ?? 0) > 0;
+      const stage = derivePipelineStage({
+        status: a.status,
+        invitation_sent,
+        shortlisted_at: a.shortlisted_at,
+        calls: a.calls,
+      });
+      return { ...a, invitation_sent, ...stage, email_logs: undefined };
+    });
 
     res.json({
       success: true,
@@ -131,7 +137,15 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       .eq('application_id', req.params.id)
       .order('sent_at', { ascending: false });
 
-    res.json({ success: true, data: { ...data, calls: calls ?? [], email_logs: emailLogs ?? [] } });
+    const invitation_sent = (emailLogs ?? []).some((e: any) => e.type === 'invitation');
+    const stage = derivePipelineStage({
+      status: (data as any).status,
+      invitation_sent,
+      shortlisted_at: (data as any).shortlisted_at,
+      calls: calls ?? [],
+    });
+
+    res.json({ success: true, data: { ...data, invitation_sent, ...stage, calls: calls ?? [], email_logs: emailLogs ?? [] } });
   } catch (err) {
     next(err);
   }
@@ -197,9 +211,13 @@ router.patch(
     try {
       const body = updateApplicationSchema.parse(req.body);
 
+      // Stamp shortlisted_at so the 7-day board auto-archive is exact.
+      const updates: Record<string, unknown> = { ...body };
+      if (body.status === 'shortlisted') updates.shortlisted_at = new Date().toISOString();
+
       const { data, error } = await supabaseAdmin
         .from('applications')
-        .update(body)
+        .update(updates)
         .eq('id', req.params.id)
         .eq('org_id', req.user!.org_id)
         .select()

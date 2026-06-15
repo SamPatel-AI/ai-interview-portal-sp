@@ -140,6 +140,18 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
   const token = await getCeipalToken();
   const ceipalJobs = await fetchCeipalJobs(token);
 
+  // Map CEIPAL company id -> our client_company id, so jobs auto-link to the
+  // right client when that client has been tagged with its ceipal_company_id.
+  const { data: clients } = await supabaseAdmin
+    .from('client_companies')
+    .select('id, ceipal_company_id')
+    .eq('org_id', orgId)
+    .not('ceipal_company_id', 'is', null);
+  const clientByCeipalId = new Map<string, string>();
+  for (const c of clients ?? []) {
+    if (c.ceipal_company_id) clientByCeipalId.set(String(c.ceipal_company_id), c.id);
+  }
+
   let created = 0;
   let updated = 0;
 
@@ -160,6 +172,10 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
       status: mapJobStatus(cJob.job_status),
       pay_rate: formatPayRate(cJob.pay_rates),
       ceipal_company_id: cJob.company != null ? String(cJob.company) : null,
+      // Auto-link to the client whose ceipal_company_id matches this job's company.
+      ...(cJob.company != null && clientByCeipalId.has(String(cJob.company))
+        ? { client_company_id: clientByCeipalId.get(String(cJob.company)) }
+        : {}),
       synced_at: new Date().toISOString(),
     };
 
