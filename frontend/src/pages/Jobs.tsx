@@ -7,6 +7,7 @@ import { Search, RefreshCw, Briefcase, Loader2 } from 'lucide-react';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import JobDetailSheet from '@/components/organisms/jobs/JobDetailSheet';
+import Pagination from '@/components/molecules/Pagination';
 import { useJobs, useSyncCeipal } from '@/domains/jobs';
 import { JOB_STATUS_COLORS } from '@/lib/constants';
 
