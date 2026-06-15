@@ -285,6 +285,72 @@ export async function discoverCeipalClientField(): Promise<unknown> {
       )
     : null;
 
+  // The job-posting API exposes NO client field (only business_unit_id), yet
+  // the CEIPAL UI shows a real "Client" (e.g. "Ford Motors", internal id 2).
+  // It must live in a separate client API. Probe candidate endpoints + a few
+  // job-detail param variants to find (a) a client list (id->name) and (b) any
+  // job->client linkage. Report status + shape for each.
+  const probe = async (url: string): Promise<Record<string, unknown>> => {
+    try {
+      const r = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      let body: unknown = null;
+      try {
+        body = await r.json();
+      } catch {
+        body = '[non-json response]';
+      }
+      const results = (body as { results?: unknown[] })?.results;
+      const sample = Array.isArray(results) ? results[0] : body;
+      return {
+        url,
+        status: r.status,
+        topKeys: body && typeof body === 'object' ? Object.keys(body as object).slice(0, 30) : null,
+        sampleKeys:
+          sample && typeof sample === 'object' ? Object.keys(sample as object).slice(0, 40) : null,
+        sample: sample && typeof sample === 'object' ? sample : body,
+      };
+    } catch (e) {
+      return { url, error: e instanceof Error ? e.message : String(e) };
+    }
+  };
+
+  const base = 'https://api.ceipal.com/v1/';
+  const clientEndpointProbes = [];
+  for (const ep of [
+    'getClientList',
+    'getClientsList',
+    'getClients',
+    'getClientDetails',
+    'getCompanyList',
+    'getBusinessUnitList',
+  ]) {
+    clientEndpointProbes.push(await probe(`${base}${ep}/?page=1`));
+  }
+
+  // Re-probe job detail with param variants that might unlock a client field.
+  const firstId = idSources[0]?.value;
+  const jobDetailVariants = firstId
+    ? await Promise.all(
+        [`${base}getJobPostingDetails/?job_id=${firstId}&fields=all`].map((u) => probe(u)),
+      )
+    : [];
+
+  // The keys showed NO client field, so dump full VALUES of the first job's
+  // list item + detail so we can locate where the end-client name actually
+  // lives (likely embedded in title / description / department / address text).
+  // Truncate long HTML blobs so the payload stays readable.
+  const truncate = (o: Record<string, unknown> | null) =>
+    o
+      ? Object.fromEntries(
+          Object.entries(o).map(([k, v]) => [
+            k,
+            typeof v === 'string' && v.length > 600 ? v.slice(0, 600) + '…[truncated]' : v,
+          ]),
+        )
+      : null;
+
   return {
     listFirstJobKeys: Object.keys(first),
     listFirstJobClientHints: Object.fromEntries(
@@ -294,5 +360,9 @@ export async function discoverCeipalClientField(): Promise<unknown> {
     detailAttempts: attempts,
     detailResponseKeys: detailKeys,
     detailClientHintFields: clientHintFields,
+    listFirstJobFull: truncate(first),
+    detailFull: truncate(detailSample),
+    clientEndpointProbes,
+    jobDetailVariants,
   };
 }
