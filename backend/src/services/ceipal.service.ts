@@ -42,20 +42,33 @@ async function getCeipalToken(): Promise<string> {
  * Fetch jobs from CEIPAL API.
  */
 async function fetchCeipalJobs(token: string, searchKey?: string): Promise<CeipalJob[]> {
-  const url = new URL('https://api.ceipal.com/v1/getJobPostingsList');
-  if (searchKey) url.searchParams.set('searchkey', searchKey);
+  const all: CeipalJob[] = [];
+  let page = 1;
+  let numPages = 1;
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-  });
+  // CEIPAL paginates getJobPostingsList (default 20/page). Loop until all pages
+  // are fetched so we don't silently miss older jobs.
+  do {
+    const url = new URL('https://api.ceipal.com/v1/getJobPostingsList');
+    if (searchKey) url.searchParams.set('searchkey', searchKey);
+    url.searchParams.set('page', String(page));
 
-  if (!response.ok) throw new Error(`CEIPAL jobs fetch failed: ${response.status}`);
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
 
-  const data = await response.json() as { results: CeipalJob[] };
-  return data.results || [];
+    if (!response.ok) throw new Error(`CEIPAL jobs fetch failed: ${response.status}`);
+
+    const data = await response.json() as { results?: CeipalJob[]; num_pages?: number };
+    all.push(...(data.results || []));
+    numPages = data.num_pages || 1;
+    page += 1;
+  } while (page <= numPages && page <= 100); // hard cap as a runaway guard
+
+  return all;
 }
 
 /**
