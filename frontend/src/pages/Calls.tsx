@@ -146,6 +146,18 @@ export default function Calls() {
         </Card>
       )}
 
+      {data && (
+        <Pagination
+          page={data.page ?? page}
+          limit={data.limit}
+          total={data.total}
+          totalPages={data.totalPages}
+          onPageChange={setPage}
+        />
+      )}
+
+
+
       <CallDetailSheet callId={selectedCallId} open={sheetOpen} onOpenChange={setSheetOpen} />
 
       <Dialog open={callNowOpen} onOpenChange={setCallNowOpen}>
