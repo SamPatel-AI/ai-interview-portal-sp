@@ -161,5 +161,4 @@ export default function Applications() {
     </div>
   );
 }
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _unused = ACTIVE_STATUSES;
+
