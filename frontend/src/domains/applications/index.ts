@@ -2,6 +2,7 @@ export { useApplications, useApplication, useCreateApplication, useUpdateApplica
 export { applicationKeys } from './hooks/queryKeys';
 export type {
   Application,
+  PipelineStage,
   CreateApplicationInput,
   ScreeningResult,
   CallEvaluation,
