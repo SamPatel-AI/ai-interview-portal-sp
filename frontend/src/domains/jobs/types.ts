@@ -3,6 +3,7 @@ export interface Job {
   org_id: string;
   client_company_id: string | null;
   ceipal_job_id: string | null;
+  job_code?: string | null;
   title: string;
   description: string;
   skills: string[];
@@ -18,6 +19,7 @@ export interface Job {
   scheduling_config: Record<string, unknown>;
   synced_at: string | null;
   created_at: string;
+  applications_count?: number;
   client_companies?: { id: string; name: string };
   ai_agents?: { id: string; name: string };
   users?: { id: string; full_name: string };
