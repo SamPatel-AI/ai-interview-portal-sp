@@ -77,6 +77,17 @@ export default function Candidates() {
         </Card>
       )}
 
+      {data && (
+        <Pagination
+          page={data.page ?? page}
+          limit={data.limit}
+          total={data.total}
+          totalPages={data.totalPages}
+          onPageChange={setPage}
+        />
+      )}
+
+
       <CandidateDetailSheet candidateId={selectedId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
   );
