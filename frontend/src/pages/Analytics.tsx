@@ -7,7 +7,8 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tool
 import { StatsSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import { Button } from '@/components/ui/button';
-import { useOverview, useRecruiterStats, useAgentStats, useExportReport } from '@/domains/analytics';
+import { useOverview, useRecruiterStats, useAgentStats, useExportReport, useRecruiterWorkload } from '@/domains/analytics';
+import RecruiterWorkloadTab from '@/components/organisms/analytics/RecruiterWorkloadTab';
 import { useAgents } from '@/domains/agents';
 import { useAuthMe } from '@/domains/auth';
 
