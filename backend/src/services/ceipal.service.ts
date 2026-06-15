@@ -337,6 +337,49 @@ export async function discoverCeipalClientField(): Promise<unknown> {
       )
     : [];
 
+  // getClientsList works — pull the FULL client roster (id, name, business units)
+  // so we can see whether business_unit_id maps a job to a client (1:1) or BUs
+  // are shared. Then probe getClientDetails (param unknown) using a real client
+  // id, in case it returns the client's associated jobs (reverse link).
+  let clientRoster: Array<Record<string, unknown>> = [];
+  let clientPages = 0;
+  let firstClientId: string | undefined;
+  try {
+    const r = await fetch(`${base}getClientsList/?page=1`, {
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    });
+    const j = (await r.json()) as { results?: Record<string, unknown>[]; num_pages?: number };
+    clientPages = j.num_pages || 1;
+    clientRoster = (j.results || []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      primary_business_unit: c.primary_business_unit,
+      accessible_business_units: c.accessible_business_units,
+      status: c.status,
+    }));
+    firstClientId = j.results?.[0]?.id ? String(j.results[0].id) : undefined;
+  } catch (e) {
+    clientRoster = [{ error: e instanceof Error ? e.message : String(e) }];
+  }
+
+  // getClientDetails param discovery (it 400'd with no param).
+  const clientDetailVariants = firstClientId
+    ? await Promise.all(
+        [
+          `${base}getClientDetails/?client_id=${firstClientId}`,
+          `${base}getClientDetails/?id=${firstClientId}`,
+        ].map((u) => probe(u)),
+      )
+    : [];
+
+  // Distribution of business_unit_id across the first page of jobs — if every
+  // job shares one BU, BU cannot discriminate the client.
+  const jobBuDistribution: Record<string, number> = {};
+  for (const j of (listJson.results || []).slice(0, 20)) {
+    const bu = String((j as Record<string, unknown>).company ?? 'none');
+    jobBuDistribution[bu] = (jobBuDistribution[bu] || 0) + 1;
+  }
+
   // The keys showed NO client field, so dump full VALUES of the first job's
   // list item + detail so we can locate where the end-client name actually
   // lives (likely embedded in title / description / department / address text).
@@ -364,5 +407,9 @@ export async function discoverCeipalClientField(): Promise<unknown> {
     detailFull: truncate(detailSample),
     clientEndpointProbes,
     jobDetailVariants,
+    clientRoster,
+    clientPages,
+    clientDetailVariants,
+    jobBuDistribution,
   };
 }
