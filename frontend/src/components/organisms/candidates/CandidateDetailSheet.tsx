@@ -86,6 +86,7 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
                   <a href={c.resume_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 mr-1" />View Résumé</a>
                 </Button>
               )}
+            </div>
             <ScrollArea className="flex-1 p-6">
               <div className="space-y-6">
                 {/* Resume */}
