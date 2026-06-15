@@ -14,6 +14,7 @@ import { useApplications, useApproveInterview, useUpdateApplication } from '@/do
 
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
+  const [page, setPage] = useState(1);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
