@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 import { phonesMatch } from '../utils/phone';
 import { scheduleCallRetry } from '../jobs/callRetry.job';
 import { buildInboundContext } from '../utils/retellPromptBuilder';
+import { verifyRetellSignature, requireWebhookSecret } from '../middleware/webhookAuth';
 
 const router = Router();
 
@@ -15,7 +16,7 @@ router.use(webhookLimiter);
 // Auto-creates candidate + application + triggers resume screening.
 // This is the entry point that replaces the n8n Outlook trigger.
 
-router.post('/candidate-intake', async (req: Request, res: Response, _next: NextFunction) => {
+router.post('/candidate-intake', requireWebhookSecret, async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const body = typeof req.body === 'string'
       ? JSON.parse(req.body)
@@ -199,7 +200,7 @@ router.post('/candidate-intake', async (req: Request, res: Response, _next: Next
 // Auto-schedules the outbound Retell AI call for that time slot.
 // This closes the loop: recruiter approves → email sent → candidate books → AI calls.
 
-router.post('/cal-booking', async (req: Request, res: Response, _next: NextFunction) => {
+router.post('/cal-booking', requireWebhookSecret, async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const body = typeof req.body === 'string'
       ? JSON.parse(req.body)
@@ -324,7 +325,7 @@ router.post('/cal-booking', async (req: Request, res: Response, _next: NextFunct
 // ─── POST /api/webhooks/retell/post-call ───────────────────
 // Retell fires this after a call ends with analysis
 
-router.post('/retell/post-call', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/retell/post-call', verifyRetellSignature, async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Parse raw body (mounted before JSON parser in index.ts)
     const body = typeof req.body === 'string'
@@ -515,7 +516,7 @@ router.post('/retell/post-call', async (req: Request, res: Response, next: NextF
 // ─── POST /api/webhooks/retell/inbound ─────────────────────
 // Retell fires this when an inbound call comes in to route to the right agent
 
-router.post('/retell/inbound', async (req: Request, res: Response, _next: NextFunction) => {
+router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const body = typeof req.body === 'string'
       ? JSON.parse(req.body)

@@ -52,7 +52,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         *,
         candidates (id, first_name, last_name, email, phone),
         jobs (id, title, client_company_id, status, client_companies (id, name)),
-        calls (id, status, disconnection_reason, started_at)
+        calls (id, status, disconnection_reason, started_at),
+        email_logs (count)
       `, { count: 'exact' })
       .eq('org_id', req.user!.org_id);
 
@@ -68,9 +69,15 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     if (error) throw new AppError(500, 'Failed to fetch applications');
 
+    const enriched = (data ?? []).map((a: any) => ({
+      ...a,
+      invitation_sent: (a.email_logs?.[0]?.count ?? 0) > 0,
+      email_logs: undefined,
+    }));
+
     res.json({
       success: true,
-      data,
+      data: enriched,
       total: count ?? 0,
       page,
       limit,
@@ -286,6 +293,57 @@ router.post(
       });
 
       res.json({ success: true, data: { message: 'Invitation email sent successfully' } });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── POST /api/applications/:id/resend-invitation ─────────
+// Resend invitation (for missed calls or candidates who didn't book)
+
+router.post(
+  '/:id/resend-invitation',
+  requireRole('admin', 'recruiter'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { data: app, error } = await supabaseAdmin
+        .from('applications')
+        .select(`
+          id, interview_deadline,
+          candidates (id, first_name, last_name, email),
+          jobs (title)
+        `)
+        .eq('id', req.params.id)
+        .eq('org_id', req.user!.org_id)
+        .single();
+
+      if (error || !app) throw new AppError(404, 'Application not found');
+
+      const candidate = (app.candidates as any);
+      const job = (app.jobs as any);
+      if (!candidate?.email) throw new AppError(400, 'Candidate has no email address');
+
+      const deadline = (app as any).interview_deadline ? new Date((app as any).interview_deadline) : null;
+
+      const { sendInvitationEmail } = await import('../services/email.service');
+      await sendInvitationEmail(
+        { id: candidate.id, first_name: candidate.first_name, last_name: candidate.last_name, email: candidate.email },
+        job.title,
+        app.id,
+        deadline
+      );
+
+      await supabaseAdmin.from('activity_log').insert({
+        org_id: req.user!.org_id,
+        user_id: req.user!.id,
+        entity_type: 'application',
+        entity_id: app.id,
+        action: 'approved_for_interview',
+        details: { candidate_email: candidate.email, job_title: job.title, resent: true },
+      });
+
+      res.json({ success: true, data: { message: 'Invitation resent successfully' } });
     } catch (err) {
       next(err);
     }

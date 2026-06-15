@@ -18,6 +18,9 @@ const envSchema = z.object({
   RETELL_WEBHOOK_SECRET: z.string().optional(),
   RETELL_FROM_NUMBER: z.string().default('+10000000000'),
 
+  // Shared secret required (when set) on candidate-intake and cal-booking webhooks
+  WEBHOOK_SHARED_SECRET: z.string().optional(),
+
   CEIPAL_API_KEY: z.string().default(''),
   CEIPAL_EMAIL: z.string().default(''),
   CEIPAL_PASSWORD: z.string().default(''),
