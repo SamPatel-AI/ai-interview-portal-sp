@@ -13,6 +13,14 @@ export function useTeamMembers() {
   });
 }
 
+export function useTeamRecruiters() {
+  const query = useTeamMembers();
+  const recruiters = (query.data?.data ?? []).filter(
+    (m) => m.role === 'admin' || m.role === 'recruiter'
+  );
+  return { ...query, recruiters };
+}
+
 export function useInviteUser() {
   const qc = useQueryClient();
   const { toast } = useToast();
