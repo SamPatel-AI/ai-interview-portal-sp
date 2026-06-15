@@ -5,11 +5,21 @@ import * as service from '../services/applications.service';
 import type { CreateApplicationInput } from '../types';
 import { STALE, PAGE_SIZE } from '@/lib/constants';
 
-export function useApplications(params: { page?: number; job_id?: string; status?: string; recruiter_id?: string } = {}) {
+export function useApplications(params: { page?: number; job_id?: string; status?: string; pipeline_stage?: string; recruiter_id?: string } = {}) {
   return useQuery({
     queryKey: applicationKeys.list(params),
     queryFn: () => service.fetchApplications({ ...params, limit: PAGE_SIZE.MD }),
     staleTime: STALE.MEDIUM,
+  });
+}
+
+export function useResendInvitation() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (id: string) => service.resendInvitation(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: applicationKeys.all }); toast({ title: 'Invitation re-sent' }); },
+    onError: (err: Error) => { toast({ title: 'Failed to re-send invitation', description: err.message, variant: 'destructive' }); },
   });
 }
 
