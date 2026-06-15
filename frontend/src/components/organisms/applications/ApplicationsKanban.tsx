@@ -5,7 +5,7 @@ import { CheckCircle, Mail, Phone, ThumbsDown, ThumbsUp, XCircle } from 'lucide-
 import type { Application } from '@/domains/applications';
 import { APPLICATION_STATUS_LABELS } from '@/lib/constants';
 import {
-  APPLICATION_STATUSES,
+  
   canApproveForInterview,
   canMakeFinalDecision,
   candidateName,
