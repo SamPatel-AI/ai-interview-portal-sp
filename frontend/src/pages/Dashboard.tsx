@@ -92,7 +92,7 @@ export default function Dashboard() {
                 <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
               ) : (
                 <div className="space-y-4">
-                  {recentActivity.map((item: any, i: number) => (
+                  {recentActivity.map((item, i: number) => (
                     <div key={i} className="flex items-start gap-3">
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                         <span className="text-xs font-medium text-primary">{item.user[0]}</span>
@@ -113,7 +113,7 @@ export default function Dashboard() {
               <CardHeader><CardTitle className="text-base">Application Pipeline</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {pipeline.map((stage: any) => (
+                  {pipeline.map((stage) => (
                     <div key={stage.stage} className="flex items-center gap-3">
                       <span className="text-sm text-muted-foreground w-24 shrink-0">{stage.stage}</span>
                       <div className="flex-1 bg-muted rounded-full h-6 overflow-hidden">
@@ -140,7 +140,7 @@ export default function Dashboard() {
                 <p className="text-sm text-muted-foreground text-center py-6">No upcoming interviews</p>
               ) : (
                 <div className="space-y-3">
-                  {scheduledCalls.map((call: any, i: number) => (
+                  {scheduledCalls.map((call, i: number) => (
                     <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{call.candidate}</p>
