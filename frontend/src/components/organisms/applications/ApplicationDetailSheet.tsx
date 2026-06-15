@@ -46,6 +46,8 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
   const [notesEditing, setNotesEditing] = useState(false);
 
   const { data, isLoading } = useApplication(open ? applicationId : null);
+  const { recruiters } = useTeamRecruiters();
+  const assignMutation = useAssignRecruiter();
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['applications'] });
