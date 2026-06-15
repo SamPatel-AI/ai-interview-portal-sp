@@ -8,6 +8,7 @@ import ApplicationsKanban from '@/components/organisms/applications/Applications
 import ApplicationsTable from '@/components/organisms/applications/ApplicationsTable';
 import CompanyFilterBar from '@/components/organisms/applications/CompanyFilterBar';
 import InviteDeadlineDialog from '@/components/organisms/applications/InviteDeadlineDialog';
+import Pagination from '@/components/molecules/Pagination';
 import { getScore } from '@/components/organisms/applications/applicationListHelpers';
 import { useApplications, useApproveInterview, useUpdateApplication } from '@/domains/applications';
 
