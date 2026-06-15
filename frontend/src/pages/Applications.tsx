@@ -12,7 +12,7 @@ import Pagination from '@/components/molecules/Pagination';
 import { getScore } from '@/components/organisms/applications/applicationListHelpers';
 import { useApplications, useApproveInterview, useUpdateApplication, type Application } from '@/domains/applications';
 
-const ACTIVE_STATUSES = ['new', 'screening', 'shortlisted'] as const;
+
 
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
