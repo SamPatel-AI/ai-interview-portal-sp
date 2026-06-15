@@ -4,7 +4,7 @@ import { supabaseAdmin } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import '../types';
-import { syncCeipalJobs } from '../services/ceipal.service';
+import { ceipalSyncQueue } from '../jobs/ceipalSync.job';
 
 const router = Router();
 
@@ -192,20 +192,26 @@ router.post(
     try {
       const { client_company_id } = req.body;
 
-      const result = await syncCeipalJobs(req.user!.org_id, client_company_id);
+      // The full client+job sync is call-heavy (one CEIPAL request per client +
+      // throttle/backoff) and exceeds the HTTP request window — enqueue it onto
+      // the BullMQ worker so it always runs to completion in the background.
+      const job = await ceipalSyncQueue.add('manual-sync', {
+        orgId: req.user!.org_id,
+        clientCompanyId: client_company_id,
+      });
 
       await supabaseAdmin.from('activity_log').insert({
         org_id: req.user!.org_id,
         user_id: req.user!.id,
         entity_type: 'job',
         entity_id: req.user!.org_id,
-        action: 'ceipal_sync',
-        details: result,
+        action: 'ceipal_sync_queued',
+        details: { jobId: job.id },
       });
 
-      res.json({ success: true, data: result });
+      res.status(202).json({ success: true, queued: true, jobId: job.id });
     } catch (err) {
-      next(err instanceof Error ? new AppError(500, `CEIPAL sync failed: ${err.message}`) : err);
+      next(err instanceof Error ? new AppError(500, `CEIPAL sync enqueue failed: ${err.message}`) : err);
     }
   }
 );

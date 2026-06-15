@@ -127,6 +127,23 @@ interface CeipalClient {
 }
 
 /**
+ * Normalize a company name for duplicate detection: lowercase, strip
+ * punctuation + common legal/structural suffix words, fold "motors"→"motor"
+ * (Ford Motors ↔ Ford Motor Company), collapse whitespace. Conservative on
+ * purpose — we only want to merge clear variants of the SAME company, never
+ * distinct companies.
+ */
+function normalizeCompanyName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(inc|llc|ltd|corp|corporation|company|co|group|technologies|technology|consulting|services)\b/g, ' ')
+    .replace(/\bmotors\b/g, 'motor')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Fetch all clients from CEIPAL (getClientsList, paginated).
  */
 async function fetchCeipalClients(token: string): Promise<CeipalClient[]> {
@@ -209,10 +226,12 @@ async function syncCeipalClients(
   clientCount: number;
   jobCodeToClientId: Map<string, string>;
   filterIgnoredClients: number;
+  merged: number;
 }> {
   const clients = await fetchCeipalClients(token);
   const jobCodeToClientId = new Map<string, string>();
   let clientCount = 0;
+  let merged = 0;
 
   // Guard baseline: how many jobs exist unfiltered. If a `client=`-filtered
   // request returns this same total, the filter was ignored and we must NOT map
@@ -220,40 +239,66 @@ async function syncCeipalClients(
   const totalJobs = await fetchTotalJobCount(token);
   let filterIgnoredClients = 0;
 
+  // Load all existing companies once so we can match by ceipal id OR normalized
+  // name (catches pre-existing/manually-created clients) and merge duplicates.
+  const { data: existingRows } = await supabaseAdmin
+    .from('client_companies')
+    .select('id, name, ceipal_company_id')
+    .eq('org_id', orgId);
+  const existing: Array<{ id: string; name: string; ceipal_company_id: string | null }> =
+    existingRows ?? [];
+
   for (const c of clients) {
     if (!c.name) continue;
+    const cNorm = normalizeCompanyName(c.name);
 
-    const { data: byCeipal } = await supabaseAdmin
-      .from('client_companies')
-      .select('id')
-      .eq('org_id', orgId)
-      .eq('ceipal_company_id', c.id)
-      .maybeSingle();
-    let ourId = byCeipal?.id as string | undefined;
+    // Matches: same CEIPAL id, or same normalized name.
+    const matches = existing.filter(
+      (e) => e.ceipal_company_id === c.id || normalizeCompanyName(e.name) === cNorm,
+    );
 
-    if (!ourId) {
-      const { data: byName } = await supabaseAdmin
+    let canonicalId: string | undefined;
+    if (matches.length === 0) {
+      const { data: created } = await supabaseAdmin
         .from('client_companies')
-        .select('id')
-        .eq('org_id', orgId)
-        .ilike('name', c.name)
-        .maybeSingle();
-      if (byName?.id) {
-        ourId = byName.id;
+        .insert({ org_id: orgId, name: c.name, ceipal_company_id: c.id })
+        .select('id, name, ceipal_company_id')
+        .single();
+      if (created) {
+        existing.push(created);
+        canonicalId = created.id;
+      }
+    } else {
+      // Prefer the row already tagged with this CEIPAL id, else keep the first
+      // (preserves a user's original company name). Tag it with the CEIPAL id.
+      const canonical = matches.find((m) => m.ceipal_company_id === c.id) ?? matches[0];
+      canonicalId = canonical.id;
+      if (canonical.ceipal_company_id !== c.id) {
         await supabaseAdmin
           .from('client_companies')
           .update({ ceipal_company_id: c.id })
-          .eq('id', ourId);
-      } else {
-        const { data: created } = await supabaseAdmin
-          .from('client_companies')
-          .insert({ org_id: orgId, name: c.name, ceipal_company_id: c.id })
-          .select('id')
-          .single();
-        ourId = created?.id;
+          .eq('id', canonical.id);
+        canonical.ceipal_company_id = c.id;
+      }
+      // Soft-merge any sibling duplicates into the canonical: reassign their
+      // jobs + agents, then leave the now-empty sibling in place (the portal
+      // hides zero-job companies). No deletes → no unique company is lost.
+      for (const sib of matches) {
+        if (sib.id === canonical.id) continue;
+        await supabaseAdmin
+          .from('jobs')
+          .update({ client_company_id: canonical.id })
+          .eq('org_id', orgId)
+          .eq('client_company_id', sib.id);
+        await supabaseAdmin
+          .from('ai_agents')
+          .update({ client_company_id: canonical.id })
+          .eq('org_id', orgId)
+          .eq('client_company_id', sib.id);
+        merged++;
       }
     }
-    if (!ourId) continue;
+    if (!canonicalId) continue;
     clientCount++;
 
     const { codes, count } = await fetchClientJobCodes(token, c.id);
@@ -263,12 +308,12 @@ async function syncCeipalClients(
       filterIgnoredClients++;
       continue;
     }
-    for (const code of codes) jobCodeToClientId.set(code, ourId);
+    for (const code of codes) jobCodeToClientId.set(code, canonicalId);
 
     await sleep(250); // be polite to CEIPAL's rate limiter between clients
   }
 
-  return { clientCount, jobCodeToClientId, filterIgnoredClients };
+  return { clientCount, jobCodeToClientId, filterIgnoredClients, merged };
 }
 
 /**
@@ -309,10 +354,11 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
   // Sync clients first and build job_code -> our client_company.id. CEIPAL only
   // exposes the job->client link via the `client` filter on the job list, so we
   // resolve it here once for every client and look it up per job below.
-  const { clientCount, jobCodeToClientId, filterIgnoredClients } = await syncCeipalClients(
+  const { clientCount, jobCodeToClientId, filterIgnoredClients, merged } = await syncCeipalClients(
     orgId,
     token,
   );
+  if (merged > 0) logger.info(`CEIPAL sync merged ${merged} duplicate client row(s)`);
   if (filterIgnoredClients > 0) {
     logger.warn(
       `CEIPAL client= filter appears unreliable: ${filterIgnoredClients} client(s) returned the full job set. Those jobs are left unassigned rather than mislinked.`,
