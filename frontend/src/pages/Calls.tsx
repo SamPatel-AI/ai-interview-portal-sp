@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { TableSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import CallDetailSheet from '@/components/organisms/calls/CallDetailSheet';
+import Pagination from '@/components/molecules/Pagination';
 import { useCalls, useInitiateCall, useScheduleCall } from '@/domains/calls';
 import { useApplications } from '@/domains/applications';
 
