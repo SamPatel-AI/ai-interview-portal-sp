@@ -23,6 +23,7 @@ export default function Analytics() {
   const { data: agentsData } = useAgents();
   const { data: agentStatsData } = useAgentStats(selectedAgentId || null);
   const exportMutation = useExportReport();
+  const { data: workloadData } = useRecruiterWorkload();
 
   const handleExport = () => exportMutation.mutate(exportType);
 
