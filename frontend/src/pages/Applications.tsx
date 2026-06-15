@@ -70,6 +70,7 @@ export default function Applications() {
   const activeApps = sortByScore([
     ...(newQuery.data?.data ?? []),
     ...(screeningQuery.data?.data ?? []),
+    ...(interviewedQuery.data?.data ?? []),
     ...(shortlistedQuery.data?.data ?? []),
   ]);
 
