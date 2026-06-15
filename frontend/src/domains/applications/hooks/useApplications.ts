@@ -60,3 +60,18 @@ export function useScreenApplication() {
     onError: (err: Error) => { toast({ title: 'Screening failed', description: err.message, variant: 'destructive' }); },
   });
 }
+
+export function useAssignRecruiter() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ id, recruiterId }: { id: string; recruiterId: string }) =>
+      service.assignRecruiter(id, recruiterId),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: applicationKeys.detail(id) });
+      qc.invalidateQueries({ queryKey: applicationKeys.all });
+      toast({ title: 'Recruiter assigned' });
+    },
+    onError: (err: Error) => { toast({ title: 'Failed to assign recruiter', description: err.message, variant: 'destructive' }); },
+  });
+}

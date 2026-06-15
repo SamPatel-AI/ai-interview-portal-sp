@@ -9,9 +9,11 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Loader2, CheckCircle, XCircle, Mail, ArrowRight, ThumbsUp, ThumbsDown, Trophy,
+  Loader2, CheckCircle, XCircle, Mail, ArrowRight, ThumbsUp, ThumbsDown, Trophy, UserCheck,
 } from 'lucide-react';
-import { useApplication } from '@/domains/applications';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useApplication, useAssignRecruiter } from '@/domains/applications';
+import { useTeamRecruiters } from '@/domains/settings';
 import ApplicationScreeningPanel from './ApplicationScreeningPanel';
 import ApplicationCallsPanel from './ApplicationCallsPanel';
 import ApplicationEmailsPanel from './ApplicationEmailsPanel';
@@ -44,6 +46,8 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
   const [notesEditing, setNotesEditing] = useState(false);
 
   const { data, isLoading } = useApplication(open ? applicationId : null);
+  const { recruiters } = useTeamRecruiters();
+  const assignMutation = useAssignRecruiter();
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['applications'] });
@@ -186,6 +190,34 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
                     <ApplicationEmailsPanel emails={app.email_logs} />
                   </>
                 )}
+
+                <Separator />
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <UserCheck className="h-4 w-4 text-primary" />
+                    Assigned Recruiter
+                  </h3>
+                  <Select
+                    value={app.assigned_recruiter_id ?? 'unassigned'}
+                    onValueChange={(value) => {
+                      if (!applicationId) return;
+                      assignMutation.mutate({ id: applicationId, recruiterId: value === 'unassigned' ? '' : value });
+                    }}
+                    disabled={assignMutation.isPending}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Unassigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {recruiters.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.full_name} <span className="text-muted-foreground text-xs ml-1">({r.role})</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 <Separator />
                 <div className="space-y-2">
