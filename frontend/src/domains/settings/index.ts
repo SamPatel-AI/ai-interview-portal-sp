@@ -1,5 +1,6 @@
 export {
   useTeamMembers,
+  useTeamRecruiters,
   useInviteUser,
   useUpdateUser,
   useSchedulingConfig,
