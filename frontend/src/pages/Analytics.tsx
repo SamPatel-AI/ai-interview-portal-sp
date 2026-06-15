@@ -28,7 +28,7 @@ export default function Analytics() {
   if (isLoading) return <div className="space-y-6"><StatsSkeleton /></div>;
   if (error) return <EmptyState title="Failed to load analytics" description={error instanceof Error ? error.message : 'An error occurred'} />;
 
-  const overview = data?.data as any;
+  const overview = data?.data;
   const kpis = [
     { label: 'Total Candidates', value: overview?.total_candidates?.toLocaleString() ?? '0', icon: Users },
     { label: 'Total Calls', value: overview?.total_calls?.toLocaleString() ?? '0', icon: Phone },
@@ -39,8 +39,8 @@ export default function Analytics() {
   const callsOverTime = overview?.calls_over_time ?? [];
   const callOutcomes = overview?.call_outcomes ?? [];
   const appsByStatus = overview?.apps_by_status ?? [];
-  const rStats = recruiterData?.data as any;
-  const aStats = agentStatsData?.data as any;
+  const rStats = recruiterData?.data;
+  const aStats = agentStatsData?.data;
   const agents = agentsData?.data ?? [];
 
   return (
@@ -114,7 +114,7 @@ export default function Analytics() {
                     <ResponsiveContainer width="100%" height={250}>
                       <PieChart>
                         <Pie data={callOutcomes} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                          {callOutcomes.map((entry: any, i: number) => <Cell key={i} fill={entry.color} />)}
+                          {callOutcomes.map((entry, i: number) => <Cell key={i} fill={entry.color} />)}
                         </Pie>
                         <Tooltip />
                         <Legend />
@@ -222,7 +222,7 @@ export default function Analytics() {
                     <ResponsiveContainer width="100%" height={250}>
                       <PieChart>
                         <Pie data={aStats.calls_by_status} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                          {aStats.calls_by_status.map((_: any, i: number) => (
+                          {aStats.calls_by_status.map((_, i: number) => (
                             <Cell key={i} fill={['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--destructive))', 'hsl(var(--info))'][i % 5]} />
                           ))}
                         </Pie>

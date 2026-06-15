@@ -14,7 +14,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const { data } = useAuthMe();
 
-  const profile = data?.data as any;
+  const profile = data?.data;
   const displayName = profile?.full_name || user?.user_metadata?.full_name || '';
   const displayEmail = profile?.email || user?.email || '';
 
