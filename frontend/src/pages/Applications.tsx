@@ -24,7 +24,7 @@ export default function Applications() {
     new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   );
 
-  const { data, isLoading, error } = useApplications({ page: 1 });
+  const { data, isLoading, error } = useApplications({ page });
   const approveInterviewMutation = useApproveInterview();
   const updateStatusMutation = useUpdateApplication();
 
