@@ -24,3 +24,8 @@ export async function fetchAgentStats(id: string) {
 export async function exportData(type: 'candidates' | 'applications' | 'calls' | 'jobs') {
   return apiRequest<string>(`/api/reports/export?type=${type}`);
 }
+
+export async function exportReport(type: string) {
+  return apiRequest<Blob>(`/api/reports/export?type=${type}`, { responseType: 'blob' });
+}
+

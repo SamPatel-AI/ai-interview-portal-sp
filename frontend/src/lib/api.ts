@@ -2,16 +2,20 @@ import { supabase } from './supabase';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-export async function apiRequest<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+export async function apiRequest<T = unknown>(
+  path: string,
+  options: RequestInit & { responseType?: 'json' | 'blob' } = {}
+): Promise<T> {
   const session = await supabase.auth.getSession();
   const token = session.data.session?.access_token;
+  const { responseType = 'json', ...rest } = options;
 
   const response = await fetch(`${API_URL}${path}`, {
-    ...options,
+    ...rest,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
+      ...rest.headers,
     },
   });
 
@@ -27,8 +31,13 @@ export async function apiRequest<T = unknown>(path: string, options: RequestInit
     throw new Error(message);
   }
 
+  if (responseType === 'blob') {
+    return response.blob() as Promise<T>;
+  }
+
   return response.json();
 }
+
 
 export async function apiUpload<T = unknown>(path: string, formData: FormData): Promise<T> {
   const session = await supabase.auth.getSession();

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { analyticsKeys } from './queryKeys';
 import * as service from '../services/analytics.service';
 import { STALE } from '@/lib/constants';
@@ -45,3 +45,20 @@ export function useAgentStats(id: string | null) {
     staleTime: STALE.MEDIUM,
   });
 }
+
+export function useExportReport() {
+  return useMutation({
+    mutationFn: (type: string) => service.exportReport(type),
+    onSuccess: (blob, type) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${type}-report-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    },
+  });
+}
+
