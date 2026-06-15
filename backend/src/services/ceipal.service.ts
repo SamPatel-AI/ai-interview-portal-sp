@@ -4,13 +4,48 @@ import { logger } from '../utils/logger';
 
 interface CeipalJob {
   position_title: string;
+  public_job_title?: string;
   public_job_desc?: string;
   requisition_description?: string;
   skills: string;
+  city?: string;
   state: string;
   country: string;
+  postal_code?: string;
   tax_terms: string;
   job_code: string;
+  company?: number | string;
+  employment_type?: string;
+  job_status?: string;
+  pay_rates?: Array<{ pay_rate_currency?: string; pay_rate?: string; min_pay_rate?: string; max_pay_rate?: string }>;
+}
+
+function mapEmploymentType(v?: string): 'full_time' | 'contract' | 'c2c' | 'w2' {
+  const s = (v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (s.includes('c2c')) return 'c2c';
+  if (s.includes('w2')) return 'w2';
+  if (s.includes('contract')) return 'contract';
+  return 'full_time';
+}
+
+function mapJobStatus(v?: string): 'open' | 'closed' | 'on_hold' | 'filled' {
+  const s = (v || '').toLowerCase();
+  if (s.includes('hold')) return 'on_hold';
+  if (s.includes('fill')) return 'filled';
+  if (s.includes('clos')) return 'closed';
+  return 'open'; // 'Active' / 'Open Until Filled' / default
+}
+
+function formatPayRate(rates?: CeipalJob['pay_rates']): string | null {
+  if (!rates || !rates.length) return null;
+  const r = rates[0];
+  const cur = (r.pay_rate_currency || '').trim();
+  const ok = (x?: string) => (x || '').trim() && (x || '').trim().toUpperCase() !== 'N/A' ? (x || '').trim() : '';
+  const min = ok(r.min_pay_rate), max = ok(r.max_pay_rate), single = ok(r.pay_rate);
+  if (min && max) return `${cur} ${min} - ${max}`.trim();
+  if (single) return `${cur} ${single}`.trim();
+  if (max) return `${cur} ${max}`.trim();
+  return null;
 }
 
 /**
@@ -113,6 +148,21 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
     const description = cleanHtmlDescription(cJob.public_job_desc || cJob.requisition_description || '');
     const skills = cJob.skills ? cJob.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
 
+    const fields = {
+      title: cJob.public_job_title || cJob.position_title,
+      description,
+      skills,
+      location: cJob.city || null,
+      state: cJob.state || null,
+      country: cJob.country || null,
+      tax_terms: cJob.tax_terms || null,
+      employment_type: mapEmploymentType(cJob.employment_type),
+      status: mapJobStatus(cJob.job_status),
+      pay_rate: formatPayRate(cJob.pay_rates),
+      ceipal_company_id: cJob.company != null ? String(cJob.company) : null,
+      synced_at: new Date().toISOString(),
+    };
+
     // Check if job already exists
     const { data: existing } = await supabaseAdmin
       .from('jobs')
@@ -122,36 +172,15 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
       .single();
 
     if (existing) {
-      // Update existing
-      await supabaseAdmin
-        .from('jobs')
-        .update({
-          title: cJob.position_title,
-          description,
-          skills,
-          state: cJob.state || null,
-          country: cJob.country || null,
-          tax_terms: cJob.tax_terms || null,
-          synced_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id);
+      await supabaseAdmin.from('jobs').update(fields).eq('id', existing.id);
       updated++;
     } else {
-      // Create new
-      await supabaseAdmin
-        .from('jobs')
-        .insert({
-          org_id: orgId,
-          client_company_id: clientCompanyId || null,
-          ceipal_job_id: jobCode,
-          title: cJob.position_title,
-          description,
-          skills,
-          state: cJob.state || null,
-          country: cJob.country || null,
-          tax_terms: cJob.tax_terms || null,
-          synced_at: new Date().toISOString(),
-        });
+      await supabaseAdmin.from('jobs').insert({
+        org_id: orgId,
+        client_company_id: clientCompanyId || null,
+        ceipal_job_id: jobCode,
+        ...fields,
+      });
       created++;
     }
   }
