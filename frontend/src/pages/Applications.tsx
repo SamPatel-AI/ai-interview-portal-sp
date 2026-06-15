@@ -90,10 +90,10 @@ export default function Applications() {
     : sourceApps.filter((app) => app.jobs?.client_companies?.name === selectedCompany);
 
   const isLoading = view === 'kanban'
-    ? newQuery.isLoading || screeningQuery.isLoading || shortlistedQuery.isLoading
+    ? newQuery.isLoading || screeningQuery.isLoading || interviewedQuery.isLoading || shortlistedQuery.isLoading
     : listQuery.isLoading;
   const error = view === 'kanban'
-    ? newQuery.error || screeningQuery.error || shortlistedQuery.error
+    ? newQuery.error || screeningQuery.error || interviewedQuery.error || shortlistedQuery.error
     : listQuery.error;
 
   if (isLoading) return <TableSkeleton cols={6} />;
