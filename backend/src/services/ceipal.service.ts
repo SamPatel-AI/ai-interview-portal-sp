@@ -285,6 +285,20 @@ export async function discoverCeipalClientField(): Promise<unknown> {
       )
     : null;
 
+  // The keys showed NO client field, so dump full VALUES of the first job's
+  // list item + detail so we can locate where the end-client name actually
+  // lives (likely embedded in title / description / department / address text).
+  // Truncate long HTML blobs so the payload stays readable.
+  const truncate = (o: Record<string, unknown> | null) =>
+    o
+      ? Object.fromEntries(
+          Object.entries(o).map(([k, v]) => [
+            k,
+            typeof v === 'string' && v.length > 600 ? v.slice(0, 600) + '…[truncated]' : v,
+          ]),
+        )
+      : null;
+
   return {
     listFirstJobKeys: Object.keys(first),
     listFirstJobClientHints: Object.fromEntries(
@@ -294,5 +308,7 @@ export async function discoverCeipalClientField(): Promise<unknown> {
     detailAttempts: attempts,
     detailResponseKeys: detailKeys,
     detailClientHintFields: clientHintFields,
+    listFirstJobFull: truncate(first),
+    detailFull: truncate(detailSample),
   };
 }
