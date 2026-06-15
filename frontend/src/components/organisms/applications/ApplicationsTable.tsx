@@ -34,6 +34,7 @@ export default function ApplicationsTable({ apps, onOpenDetail, onInvite, onReje
               <th className="text-left p-3 text-sm font-medium text-muted-foreground">Job</th>
               <th className="text-left p-3 text-sm font-medium text-muted-foreground">AI Score</th>
               <th className="text-left p-3 text-sm font-medium text-muted-foreground">Status</th>
+              <th className="text-left p-3 text-sm font-medium text-muted-foreground">Phase</th>
               <th className="text-left p-3 text-sm font-medium text-muted-foreground">Date</th>
               <th className="text-center p-3 text-sm font-medium text-muted-foreground">Actions</th>
             </tr>
@@ -41,6 +42,7 @@ export default function ApplicationsTable({ apps, onOpenDetail, onInvite, onReje
           <tbody>
             {apps.map((app) => {
               const score = getScore(app.ai_screening_score);
+              const phase = computePhase(app);
               return (
                 <tr key={app.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => onOpenDetail(app.id)}>
                   <td className="p-3 text-sm font-medium">{candidateName(app)}</td>
@@ -54,6 +56,15 @@ export default function ApplicationsTable({ apps, onOpenDetail, onInvite, onReje
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${APPLICATION_STATUS_COLORS[app.status] || ''}`}>
                       {APPLICATION_STATUS_LABELS[app.status] || app.status}
                     </span>
+                  </td>
+                  <td className="p-3">
+                    {phase ? (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${phaseClasses(phase.tone)}`}>
+                        {phase.label}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="p-3 text-sm text-muted-foreground">{formatShortDate(app.created_at)}</td>
                   <td className="p-3">
