@@ -1,4 +1,4 @@
-export interface Candidate {
+import type { ScreeningResult } from '@/domains/applications';
   id: string;
   first_name: string;
   last_name: string;
