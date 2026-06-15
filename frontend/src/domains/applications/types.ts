@@ -10,6 +10,7 @@ export interface Application {
   interview_questions: string[] | null;
   recruiter_notes: string | null;
   assigned_recruiter_id: string | null;
+  invitation_sent?: boolean;
   created_at: string;
   updated_at: string;
   candidates?: { id: string; first_name: string; last_name: string; email: string; phone?: string };
