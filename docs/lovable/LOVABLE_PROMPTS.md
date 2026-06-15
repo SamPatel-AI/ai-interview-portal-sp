@@ -93,6 +93,69 @@ Every prompt restates the project's architecture rules so Lovable doesn't violat
 
 ---
 
-## After Lovable finishes
+## After Lovable finishes (Prompts 1–5)
 Pull the Lovable changes and run `make validate` locally — it should still pass with 0 errors.
 The 53 pre-existing `any` warnings should drop substantially after Prompt 4.
+
+---
+
+# Re-add features lost in the merge (Prompts 6–7)
+
+> **Context:** Prompts 1–5 were built on an older snapshot that was missing two
+> small features from the backend branch. The backend endpoints for both already
+> exist — these prompts only rebuild the frontend, the right way (through the
+> domain layer, not inline `fetch`/`apiRequest` in the page/component).
+
+## Prompt 6 — Re-add the "Recruiter Workload" analytics tab
+
+> Add a new **"Recruiter Workload"** tab to `src/pages/Analytics.tsx`, between the
+> "Overview" and "My Performance" tabs. It must follow our Page → Hook → Service → API rule.
+>
+> 1. In `src/domains/analytics/services/analytics.service.ts`, add
+>    `getRecruiterWorkload()` that uses the shared `api` client from `@/lib/api` to
+>    GET `/api/analytics/recruiters` and returns the `data` array. Each item has:
+>    `{ id, full_name, email, role, avatar_url, open_applications, total_calls, pending_evaluations }`.
+>    Add a `RecruiterWorkload` interface to `src/domains/analytics/types.ts` for this shape.
+> 2. In `src/domains/analytics/hooks/useAnalytics.ts`, add a `useRecruiterWorkload()`
+>    query hook wrapping it, and export both the hook and the type from the analytics
+>    barrel (`src/domains/analytics/index.ts`).
+> 3. In `Analytics.tsx`, add the tab. Import only from `@/domains/analytics`. Render:
+>    - a horizontal `BarChart` (recharts) of all recruiters with three series —
+>      `open_applications` ("Open Applications"), `total_calls` ("Total Calls"),
+>      `pending_evaluations` ("Pending Reviews");
+>    - below it, a responsive grid of per-recruiter cards showing `full_name`, `email`,
+>      and the three counts with small icons (Briefcase / PhoneCall / ClipboardList).
+>    - an empty state ("No recruiter data available") when the list is empty.
+>
+> Keep it under our sizing limits — if the tab's JSX is large, extract it into a
+> data-aware organism `src/components/organisms/analytics/RecruiterWorkloadTab.tsx`
+> that receives the data via typed props (no `any`), and have the page call the hook
+> and pass the data in. Don't call `apiRequest`/`fetch` from the page or organism.
+
+## Prompt 7 — Re-add the "Assigned Recruiter" reassignment control
+
+> In the application detail view (`src/components/organisms/applications/ApplicationDetailSheet.tsx`
+> and its sub-panels), add an **"Assigned Recruiter"** section so a user can reassign
+> the application to another recruiter. Follow Page/Sheet → Hook → Service → API.
+>
+> 1. The application detail object has an `assigned_recruiter_id: string | null` field —
+>    add it to the `AppDetail` type in `src/domains/applications/types.ts` if missing.
+> 2. Recruiter list: add a service+hook to fetch org recruiters — GET `/api/users`
+>    returns `{ id, full_name, email, role }`; filter to `role === 'admin' || role === 'recruiter'`.
+>    If a team/users domain hook already exists for this, reuse it; otherwise add
+>    `useTeamRecruiters()` in the most appropriate existing domain and export it from its barrel.
+> 3. Reassign mutation: in `src/domains/applications/services/applications.service.ts` add
+>    `assignRecruiter(applicationId, recruiterId)` → POST `/api/applications/${id}/assign`
+>    with body `{ recruiter_id }`. Wrap it in a `useAssignRecruiter()` mutation hook in the
+>    applications domain that invalidates the application detail query on success and shows a
+>    toast. Export from the applications barrel.
+> 4. UI: add an "Assigned Recruiter" section (a labelled `Select` of recruiters, value bound to
+>    `assigned_recruiter_id`, placeholder "Unassigned") near the "Recruiter Notes" section of the
+>    detail sheet. Use the shadcn `Select`. On change, call the mutation. Use a `UserCheck` icon
+>    for the heading. No `any`, no inline `apiRequest`.
+>
+> Don't change other behaviour or the public props of `ApplicationDetailSheet`.
+
+## After Prompts 6–7
+Pull and run `make validate` again — still 0 errors expected. The two features should be
+back, now routed through the domain layer instead of inline calls.
