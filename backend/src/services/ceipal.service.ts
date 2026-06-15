@@ -380,6 +380,35 @@ export async function discoverCeipalClientField(): Promise<unknown> {
     jobBuDistribution[bu] = (jobBuDistribution[bu] || 0) + 1;
   }
 
+  // DECISIVE TEST: does getJobPostingsList accept a client filter? If a filtered
+  // request returns FEWER jobs than unfiltered, we can iterate clients to build
+  // a job->client map. Compare counts + first job_code per candidate param.
+  const countJobs = async (url: string): Promise<Record<string, unknown>> => {
+    try {
+      const r = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const j = (await r.json()) as { results?: Record<string, unknown>[]; count?: number };
+      const results = j.results || [];
+      return {
+        url: url.split('/v1/')[1],
+        status: r.status,
+        count: j.count ?? results.length,
+        firstJobCodes: results.slice(0, 5).map((x) => x.job_code),
+      };
+    } catch (e) {
+      return { url, error: e instanceof Error ? e.message : String(e) };
+    }
+  };
+  const unfiltered = await countJobs(`${base}getJobPostingsList?page=1`);
+  const clientFilterTests = firstClientId
+    ? await Promise.all(
+        ['client_id', 'client', 'clientid', 'end_client', 'customer'].map((param) =>
+          countJobs(`${base}getJobPostingsList?page=1&${param}=${firstClientId}`),
+        ),
+      )
+    : [];
+
   // The keys showed NO client field, so dump full VALUES of the first job's
   // list item + detail so we can locate where the end-client name actually
   // lives (likely embedded in title / description / department / address text).
@@ -411,5 +440,7 @@ export async function discoverCeipalClientField(): Promise<unknown> {
     clientPages,
     clientDetailVariants,
     jobBuDistribution,
+    unfiltered,
+    clientFilterTests,
   };
 }
