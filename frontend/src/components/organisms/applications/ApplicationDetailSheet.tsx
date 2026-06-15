@@ -9,9 +9,11 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Loader2, CheckCircle, XCircle, Mail, ArrowRight, ThumbsUp, ThumbsDown, Trophy,
+  Loader2, CheckCircle, XCircle, Mail, ArrowRight, ThumbsUp, ThumbsDown, Trophy, UserCheck,
 } from 'lucide-react';
-import { useApplication } from '@/domains/applications';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useApplication, useAssignRecruiter } from '@/domains/applications';
+import { useTeamRecruiters } from '@/domains/settings';
 import ApplicationScreeningPanel from './ApplicationScreeningPanel';
 import ApplicationCallsPanel from './ApplicationCallsPanel';
 import ApplicationEmailsPanel from './ApplicationEmailsPanel';
