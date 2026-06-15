@@ -4,7 +4,7 @@ import { supabaseAdmin } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import '../types';
-import { syncCeipalJobs } from '../services/ceipal.service';
+import { syncCeipalJobs, discoverCeipalClientField } from '../services/ceipal.service';
 
 const router = Router();
 
@@ -92,6 +92,22 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     next(err);
   }
 });
+
+// ─── GET /api/jobs/_ceipal-debug ───────────────────────────
+// TEMPORARY: discover the CEIPAL detail param + client field name. Read-only,
+// admin-only. Remove once client auto-linking is wired. MUST be declared before
+// `GET /:id` so the literal path isn't captured as an id.
+router.get(
+  '/_ceipal-debug',
+  requireRole('admin'),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ success: true, data: await discoverCeipalClientField() });
+    } catch (err) {
+      next(err instanceof Error ? new AppError(500, `CEIPAL debug failed: ${err.message}`) : err);
+    }
+  }
+);
 
 // ─── GET /api/jobs/:id ─────────────────────────────────────
 

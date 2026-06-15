@@ -214,3 +214,85 @@ export async function fetchCeipalJob(jobCode: string): Promise<CeipalJob | null>
   const jobs = await fetchCeipalJobs(token, `JPC - ${jobCode}`);
   return jobs.length > 0 ? jobs[0] : null;
 }
+
+/**
+ * TEMPORARY discovery helper — runs only from the Railway backend (CEIPAL
+ * rate-limits other IPs). It answers two unknowns needed to auto-link jobs to
+ * their END client (not the Business Unit `company` id, which is identical for
+ * every job):
+ *   1. Which field in the list response holds the internal posting id.
+ *   2. Which param `getJobPostingDetails` expects, and which field in its
+ *      response holds the client / end-customer name.
+ * It is READ-ONLY (no DB writes) and will be removed once the field names are
+ * confirmed. Hit it once on Railway and paste the JSON back.
+ */
+export async function discoverCeipalClientField(): Promise<unknown> {
+  const token = await getCeipalToken();
+
+  // Raw list (untyped) so we can see every key CEIPAL actually returns.
+  const listRes = await fetch('https://api.ceipal.com/v1/getJobPostingsList?page=1', {
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  });
+  const listJson = (await listRes.json()) as { results?: Record<string, unknown>[] };
+  const first = listJson.results?.[0] ?? {};
+
+  // Candidate id fields on the list item that might key the detail call.
+  const idFieldCandidates = ['id', 'job_id', 'job_posting_id', 'posting_id', 'jpid'];
+  const idSources = idFieldCandidates
+    .filter((f) => first[f] != null)
+    .map((f) => ({ field: f, value: first[f] }));
+
+  // Candidate param names for getJobPostingDetails. Try each id source against
+  // each param name until one returns a non-error object.
+  const paramCandidates = ['job_id', 'posting_id', 'id'];
+  const attempts: Array<Record<string, unknown>> = [];
+  let detailKeys: string[] | null = null;
+  let detailSample: Record<string, unknown> | null = null;
+
+  outer: for (const src of idSources) {
+    for (const param of paramCandidates) {
+      const url = new URL('https://api.ceipal.com/v1/getJobPostingDetails/');
+      url.searchParams.set(param, String(src.value));
+      let status = 0;
+      let keys: string[] = [];
+      let body: unknown = null;
+      try {
+        const r = await fetch(url.toString(), {
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        });
+        status = r.status;
+        body = await r.json();
+        if (body && typeof body === 'object') keys = Object.keys(body as object);
+      } catch (e) {
+        body = { error: e instanceof Error ? e.message : String(e) };
+      }
+      attempts.push({ param, idField: src.field, idValue: src.value, status, keys });
+      // A successful detail object has many keys; an error payload has few.
+      if (status === 200 && keys.length > 3) {
+        detailKeys = keys;
+        detailSample = body as Record<string, unknown>;
+        break outer;
+      }
+    }
+  }
+
+  // Surface the fields most likely to hold the client name for quick eyeballing.
+  const clientHintFields = detailSample
+    ? Object.fromEntries(
+        Object.entries(detailSample).filter(([k]) =>
+          /client|customer|account|company|end_?client/i.test(k),
+        ),
+      )
+    : null;
+
+  return {
+    listFirstJobKeys: Object.keys(first),
+    listFirstJobClientHints: Object.fromEntries(
+      Object.entries(first).filter(([k]) => /client|customer|account|company/i.test(k)),
+    ),
+    idSourcesFound: idSources,
+    detailAttempts: attempts,
+    detailResponseKeys: detailKeys,
+    detailClientHintFields: clientHintFields,
+  };
+}
