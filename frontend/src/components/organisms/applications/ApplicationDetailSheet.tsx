@@ -193,6 +193,34 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
 
                 <Separator />
                 <div className="space-y-2">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <UserCheck className="h-4 w-4 text-primary" />
+                    Assigned Recruiter
+                  </h3>
+                  <Select
+                    value={app.assigned_recruiter_id ?? 'unassigned'}
+                    onValueChange={(value) => {
+                      if (!applicationId) return;
+                      assignMutation.mutate({ id: applicationId, recruiterId: value === 'unassigned' ? '' : value });
+                    }}
+                    disabled={assignMutation.isPending}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Unassigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {recruiters.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.full_name} <span className="text-muted-foreground text-xs ml-1">({r.role})</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Separator />
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold">Recruiter Notes</h3>
                     {!notesEditing && (
