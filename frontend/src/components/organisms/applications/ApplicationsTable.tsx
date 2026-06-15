@@ -7,8 +7,10 @@ import {
   canApproveForInterview,
   canMakeFinalDecision,
   candidateName,
+  computePhase,
   formatShortDate,
   getScore,
+  phaseClasses,
   scoreBg,
   scoreColor,
 } from './applicationListHelpers';
