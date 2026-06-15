@@ -159,3 +159,49 @@ The 53 pre-existing `any` warnings should drop substantially after Prompt 4.
 ## After Prompts 6–7
 Pull and run `make validate` again — still 0 errors expected. The two features should be
 back, now routed through the domain layer instead of inline calls.
+
+---
+
+# Remove manual "Add Candidate" (Prompt 8)
+
+> **Context:** Candidates should only enter the system through the automated intake
+> (email/resume webhooks), never created by hand. Remove the manual "Add Candidate"
+> UI entirely.
+
+## Prompt 8 — Remove the "Add Candidate" feature
+
+> Remove the ability to manually add a candidate from the UI. Candidates now come only
+> from the automated intake pipeline, so there should be no "Add Candidate" form anywhere.
+>
+> 1. In `src/pages/Candidates.tsx`:
+>    - Delete the entire `Dialog` containing the "Add Candidate" button and the "Add New
+>      Candidate" form (the `<Dialog open={dialogOpen} ...>` block, including its trigger button).
+>    - Delete the related state and handler: `dialogOpen`, `firstName`, `lastName`, `email`,
+>      `phone`, `source`, `resumeFile`, the `handleCreate` function, and the
+>      `createMutation` / `uploadMutation` declarations.
+>    - In the "No candidates yet" `EmptyState`, remove the `actionLabel` and `onAction` props
+>      and change the description to something like "Candidates appear here automatically as
+>      they're imported from email and resume submissions."
+>    - Remove now-unused imports: `Dialog*`, `Label`, `Select*` (only if not used elsewhere in
+>      the file), `Plus`, `Upload`, `useCreateCandidate`, `useUploadResume`, and the
+>      `CreateCandidateInput` type import. Keep `Search`, `Users`, the table, and
+>      `CandidateDetailSheet`. The page header should keep just the search box.
+> 2. In `src/components/templates/DashboardLayout.tsx`: remove the `<DropdownMenuItem>New
+>    Candidate</DropdownMenuItem>` from the "New" dropdown. Leave "New Job" and "New Agent".
+> 3. In the candidates domain, remove the now-dead manual-create code:
+>    - `useCreateCandidate` (in `src/domains/candidates/hooks/useCandidates.ts`) and its export
+>      from the barrel `src/domains/candidates/index.ts`.
+>    - `createCandidate` and any `checkDuplicates` function in
+>      `src/domains/candidates/services/candidates.service.ts`.
+>    - The `CreateCandidateInput` type in `src/domains/candidates/types.ts` and its barrel export.
+>    - Keep `updateCandidate`, `useUploadResume`, and all read hooks/types — those are still used.
+>    - If removing `CreateCandidateInput` breaks `updateCandidate`'s param type, give
+>      `updateCandidate` its own inline `Partial<>` type instead.
+>
+> Don't change the candidates table, detail sheet, or the intake/webhook behaviour.
+> After this, there must be no way to create a candidate from the UI.
+
+## After Prompt 8
+Pull and run `make validate` — 0 errors expected. Then tell me, and I'll remove the matching
+backend endpoints (`POST /api/candidates` and `POST /api/candidates/check-duplicates`) so manual
+creation is fully gone server-side too. The webhook intake stays untouched.
