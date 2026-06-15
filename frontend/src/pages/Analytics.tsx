@@ -147,7 +147,7 @@ export default function Analytics() {
         </TabsContent>
 
         <TabsContent value="workload" className="mt-6">
-          <RecruiterWorkloadTab data={workloadData?.data ?? []} />
+          <RecruiterWorkloadTab data={workloadData ?? []} />
         </TabsContent>
 
         <TabsContent value="recruiter" className="mt-6 space-y-6">
