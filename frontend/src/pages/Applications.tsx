@@ -10,9 +10,14 @@ import CompanyFilterBar from '@/components/organisms/applications/CompanyFilterB
 import InviteDeadlineDialog from '@/components/organisms/applications/InviteDeadlineDialog';
 import Pagination from '@/components/molecules/Pagination';
 import { getScore } from '@/components/organisms/applications/applicationListHelpers';
-import { useApplications, useApproveInterview, useUpdateApplication, type Application } from '@/domains/applications';
-
-
+import {
+  useApplications,
+  useApproveInterview,
+  useUpdateApplication,
+  useResendInvitation,
+  type Application,
+} from '@/domains/applications';
+import { useInitiateCall } from '@/domains/calls';
 
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
@@ -21,44 +26,63 @@ export default function Applications() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [pendingAppId, setPendingAppId] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  );
+  const [pendingApp, setPendingApp] = useState<Application | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
-  // List view: full record, paginated, no status filter
+  // List view: full record (every pipeline_stage incl. archived), paginated.
   const listQuery = useApplications({ page });
 
-  // Kanban view: fetch all statuses that can appear on the board (rejected/hired hidden)
-  const newQuery = useApplications({ status: 'new' });
-  const screeningQuery = useApplications({ status: 'screening' });
-  const interviewedQuery = useApplications({ status: 'interviewed' });
-  const shortlistedQuery = useApplications({ status: 'shortlisted' });
+  // Kanban view: 5 stages (archived hidden by definition).
+  const newQuery = useApplications({ pipeline_stage: 'new' });
+  const inProgressQuery = useApplications({ pipeline_stage: 'in_progress' });
+  const interviewedQuery = useApplications({ pipeline_stage: 'interviewed' });
+  const failedQuery = useApplications({ pipeline_stage: 'failed' });
+  const shortlistedQuery = useApplications({ pipeline_stage: 'shortlisted' });
 
   const approveInterviewMutation = useApproveInterview();
   const updateStatusMutation = useUpdateApplication();
+  const resendInviteMutation = useResendInvitation();
+  const initiateCallMutation = useInitiateCall();
 
   const handleReject = (id: string) => updateStatusMutation.mutate({ id, status: 'rejected' });
   const handleShortlist = (id: string) => updateStatusMutation.mutate({ id, status: 'shortlisted' });
+  const handleRecall = (id: string) => initiateCallMutation.mutate(id);
+  const handleResendInvite = (id: string) => resendInviteMutation.mutate(id);
   const openDetail = (id: string) => { setSelectedAppId(id); setSheetOpen(true); };
+
+  const kanbanApps = useMemo(() => [
+    ...(newQuery.data?.data ?? []),
+    ...(inProgressQuery.data?.data ?? []),
+    ...(interviewedQuery.data?.data ?? []),
+    ...(failedQuery.data?.data ?? []),
+    ...(shortlistedQuery.data?.data ?? []),
+  ], [newQuery.data, inProgressQuery.data, interviewedQuery.data, failedQuery.data, shortlistedQuery.data]);
 
   const openInviteDialog = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setPendingAppId(id);
+    const app = kanbanApps.find((a) => a.id === id);
+    if (!app) return;
+    const existing = app.jobs?.interview_deadline;
+    if (existing) {
+      // Job already has a deadline — send invite without re-prompting.
+      approveInterviewMutation.mutate({ id });
+      return;
+    }
+    setPendingApp(app);
     setSelectedDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
     setDialogOpen(true);
   };
 
   const handleConfirmInvite = () => {
-    if (!pendingAppId || !selectedDate) return;
-    approveInterviewMutation.mutate({ id: pendingAppId, deadline: selectedDate.toISOString() });
+    if (!pendingApp || !selectedDate) return;
+    approveInterviewMutation.mutate({ id: pendingApp.id, deadline: selectedDate.toISOString() });
     setDialogOpen(false);
-    setPendingAppId(null);
+    setPendingApp(null);
   };
 
   const handleCancelInvite = () => {
     setDialogOpen(false);
-    setPendingAppId(null);
+    setPendingApp(null);
   };
 
   const sortByScore = (apps: Application[]) =>
@@ -66,15 +90,8 @@ export default function Applications() {
       (a, b) => (getScore(b.ai_screening_score) ?? 0) - (getScore(a.ai_screening_score) ?? 0)
     );
 
-  const listApps = sortByScore(listQuery.data?.data ?? []);
-  const activeApps = sortByScore([
-    ...(newQuery.data?.data ?? []),
-    ...(screeningQuery.data?.data ?? []),
-    ...(interviewedQuery.data?.data ?? []),
-    ...(shortlistedQuery.data?.data ?? []),
-  ]);
-
-  const sourceApps = view === 'kanban' ? activeApps : listApps;
+  const listApps = listQuery.data?.data ?? [];
+  const sourceApps = view === 'kanban' ? sortByScore(kanbanApps) : listApps;
 
   const companies = useMemo(() => {
     const names = new Set<string>();
@@ -90,10 +107,10 @@ export default function Applications() {
     : sourceApps.filter((app) => app.jobs?.client_companies?.name === selectedCompany);
 
   const isLoading = view === 'kanban'
-    ? newQuery.isLoading || screeningQuery.isLoading || interviewedQuery.isLoading || shortlistedQuery.isLoading
+    ? newQuery.isLoading || inProgressQuery.isLoading || interviewedQuery.isLoading || failedQuery.isLoading || shortlistedQuery.isLoading
     : listQuery.isLoading;
   const error = view === 'kanban'
-    ? newQuery.error || screeningQuery.error || interviewedQuery.error || shortlistedQuery.error
+    ? newQuery.error || inProgressQuery.error || interviewedQuery.error || failedQuery.error || shortlistedQuery.error
     : listQuery.error;
 
   if (isLoading) return <TableSkeleton cols={6} />;
@@ -102,7 +119,7 @@ export default function Applications() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <div />
+        <h1 className="text-2xl font-semibold text-foreground">Pipeline</h1>
         <div className="flex gap-1">
           <Button variant={view === 'kanban' ? 'default' : 'outline'} size="icon" className="h-9 w-9" onClick={() => setView('kanban')}>
             <LayoutGrid className="h-4 w-4" />
@@ -119,7 +136,7 @@ export default function Applications() {
         <EmptyState
           icon={ClipboardCheck}
           title={view === 'kanban' ? 'No active applications' : 'No applications'}
-          description={view === 'kanban' ? 'Active candidates (new, screening, shortlisted) will appear here.' : 'No applications match the selected company filter.'}
+          description={view === 'kanban' ? 'New, in-progress, interviewed, and shortlisted candidates will appear here.' : 'No applications match the selected company filter.'}
         />
       ) : view === 'kanban' ? (
         <ApplicationsKanban
@@ -128,15 +145,11 @@ export default function Applications() {
           onInvite={openInviteDialog}
           onReject={handleReject}
           onShortlist={handleShortlist}
+          onRecall={handleRecall}
+          onResendInvite={handleResendInvite}
         />
       ) : (
-        <ApplicationsTable
-          apps={filteredApps}
-          onOpenDetail={openDetail}
-          onInvite={openInviteDialog}
-          onReject={handleReject}
-          onShortlist={handleShortlist}
-        />
+        <ApplicationsTable apps={filteredApps} onOpenDetail={openDetail} />
       )}
 
       {view === 'table' && listQuery.data && (
@@ -157,10 +170,10 @@ export default function Applications() {
         onConfirm={handleConfirmInvite}
         onCancel={handleCancelInvite}
         isPending={approveInterviewMutation.isPending}
+        title={pendingApp ? `Set interview deadline for ${pendingApp.jobs?.title ?? 'this job'}` : undefined}
       />
 
       <ApplicationDetailSheet applicationId={selectedAppId} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
   );
 }
-
