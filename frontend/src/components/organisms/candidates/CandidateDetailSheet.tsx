@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiResponse } from '@/lib/api';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -6,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, Mail, Phone, MapPin, FileText, ChevronDown, ExternalLink } from 'lucide-react';
+import { Loader2, Mail, Phone, MapPin, FileText, ChevronDown, ExternalLink, Sparkles } from 'lucide-react';
+import type { ScreeningResult } from '@/domains/applications';
 
 interface CandidateDetail {
   id: string;
@@ -23,7 +25,9 @@ interface CandidateDetail {
   applications?: {
     id: string;
     status: string;
+    created_at: string;
     ai_screening_score: number | { score: number; explanation?: string } | null;
+    ai_screening_result?: ScreeningResult | null;
     jobs?: { title: string };
   }[];
   calls?: {
@@ -33,6 +37,7 @@ interface CandidateDetail {
     started_at: string | null;
   }[];
 }
+
 
 const getScore = (score: number | { score: number; explanation?: string } | null | undefined): number | null => {
   if (score === null || score === undefined) return null;
@@ -58,6 +63,13 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
 
   const c = data?.data;
 
+  const latestScreening = useMemo(() => {
+    if (!c?.applications?.length) return null;
+    const latest = [...c.applications].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    return latest.ai_screening_result ?? null;
+  }, [c?.applications]);
+
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
@@ -76,6 +88,11 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
                 <Badge variant="outline">{c.source}</Badge>
                 {c.work_authorization && <Badge variant="secondary">{c.work_authorization}</Badge>}
               </div>
+              {c.resume_url && (
+                <Button variant="outline" size="sm" asChild className="w-fit">
+                  <a href={c.resume_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 mr-1" />View Résumé</a>
+                </Button>
+              )}
             </div>
             <ScrollArea className="flex-1 p-6">
               <div className="space-y-6">
@@ -104,6 +121,24 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
                 )}
 
                 <Separator />
+
+                {latestScreening?.overall_fit_rating != null && (
+                  <>
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium flex items-center gap-2"><Sparkles className="h-4 w-4" />AI Screening Summary</h3>
+                      <div className="p-3 border rounded-lg space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">Overall fit:</span>
+                          <span className={`text-lg font-bold ${scoreColor(latestScreening.overall_fit_rating)}`}>{latestScreening.overall_fit_rating}</span>
+                        </div>
+                        {latestScreening.justification_for_rating && (
+                          <p className="text-sm text-muted-foreground line-clamp-2">{latestScreening.justification_for_rating}</p>
+                        )}
+                      </div>
+                    </div>
+                    <Separator />
+                  </>
+                )}
 
                 {/* Applications */}
                 <div className="space-y-3">
