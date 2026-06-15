@@ -46,6 +46,7 @@ const formatDuration = (seconds: number | null) => {
 
 export default function Calls() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [callNowOpen, setCallNowOpen] = useState(false);
@@ -53,7 +54,7 @@ export default function Calls() {
   const [appId, setAppId] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
 
-  const { data, isLoading, error } = useCalls();
+  const { data, isLoading, error } = useCalls({ page });
   const callNowMutation = useInitiateCall();
   const scheduleMutation = useScheduleCall();
 
