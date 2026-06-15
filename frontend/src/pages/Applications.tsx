@@ -29,9 +29,10 @@ export default function Applications() {
   // List view: full record, paginated, no status filter
   const listQuery = useApplications({ page });
 
-  // Kanban view: only active statuses, fetched separately per status (no pagination UI)
+  // Kanban view: fetch all statuses that can appear on the board (rejected/hired hidden)
   const newQuery = useApplications({ status: 'new' });
   const screeningQuery = useApplications({ status: 'screening' });
+  const interviewedQuery = useApplications({ status: 'interviewed' });
   const shortlistedQuery = useApplications({ status: 'shortlisted' });
 
   const approveInterviewMutation = useApproveInterview();
