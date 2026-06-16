@@ -27,41 +27,60 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { search, days, scope } = req.query;
 
-    // Count only OPEN jobs within the recency window (embedded filters affect the
-    // embed only, so companies with no matching jobs are still returned, count 0).
+    // Recency window: 30/60/90 (default 30), or 'all' to disable. Filter by
+    // CEIPAL's modified date — NOT created_at (that's our sync time, "today" for
+    // every job, which would never actually filter anything).
+    const windowDays = days === 'all' ? 0 : [30, 60, 90].includes(Number(days)) ? Number(days) : 30;
+    const scopeVal = scope === 'all' ? 'all' : 'active';
+
     let query = supabaseAdmin
       .from('client_companies')
-      .select('*, jobs (id), ai_agents (id)', { count: 'exact' })
-      .eq('org_id', req.user!.org_id)
-      .eq('jobs.status', 'open')
-      .order('name');
-
-    const windowDays = days === 'all' ? 0 : parseInt(days as string) || 30;
-    if (windowDays > 0) {
-      const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
-      query = query.gte('jobs.ceipal_modified_at', cutoff);
-    }
+      .select('*, ai_agents (id)', { count: 'exact' })
+      .eq('org_id', req.user!.org_id);
 
     if (search) {
       query = query.ilike('name', `%${search}%`);
     }
 
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) throw new AppError(500, 'Failed to fetch companies');
 
-    // jobs_count = open jobs in the window; sort highest → lowest. scope=active
-    // returns only companies that have jobs in the window; scope=all returns every
-    // company (default = active, so the portal leads with clients that have work).
-    let enriched = (data ?? [])
-      .map(({ jobs, ai_agents, ...company }) => ({
-        ...company,
-        jobs_count: Array.isArray(jobs) ? jobs.length : 0,
-        agents_count: Array.isArray(ai_agents) ? ai_agents.length : 0,
-      }))
-      .sort((a, b) => b.jobs_count - a.jobs_count || a.name.localeCompare(b.name));
+    const companies = data ?? [];
+    const companyIds = companies.map((c) => c.id);
 
-    if (scope !== 'all') enriched = enriched.filter((c) => c.jobs_count > 0);
+    // Count OPEN jobs per company within the window (separate query for an exact
+    // count, free of embedded-row quirks).
+    const jobsCountMap: Record<string, number> = {};
+    if (companyIds.length > 0) {
+      let jobsQuery = supabaseAdmin
+        .from('jobs')
+        .select('id, client_company_id')
+        .eq('org_id', req.user!.org_id)
+        .eq('status', 'open')
+        .in('client_company_id', companyIds)
+        .limit(5000);
+      if (windowDays > 0) {
+        const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+        jobsQuery = jobsQuery.gte('ceipal_modified_at', since);
+      }
+      const { data: jobs, error: jobsError } = await jobsQuery;
+      if (jobsError) throw new AppError(500, 'Failed to fetch job counts');
+      for (const job of jobs || []) {
+        if (job.client_company_id)
+          jobsCountMap[job.client_company_id] = (jobsCountMap[job.client_company_id] || 0) + 1;
+      }
+    }
+
+    // Enrich, then sort highest → lowest by open jobs in the window. scope=active
+    // (default) shows only clients with jobs; scope=all shows every client.
+    let enriched = companies.map(({ ai_agents, ...company }) => ({
+      ...company,
+      jobs_count: jobsCountMap[company.id] || 0,
+      agents_count: Array.isArray(ai_agents) ? ai_agents.length : 0,
+    }));
+    enriched.sort((a, b) => b.jobs_count - a.jobs_count || a.name.localeCompare(b.name));
+    if (scopeVal === 'active') enriched = enriched.filter((c) => c.jobs_count > 0);
 
     res.json({ success: true, data: enriched, total: enriched.length });
   } catch (err) {
