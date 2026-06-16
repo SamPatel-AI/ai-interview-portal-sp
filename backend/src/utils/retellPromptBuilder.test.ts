@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileSystemPrompt, buildSampleVariables } from './retellPromptBuilder';
+import { compileSystemPrompt, buildSampleVariables, buildDynamicVariables } from './retellPromptBuilder';
 import type { BuilderConfig } from '../types';
 
 const fullConfig: BuilderConfig = {
@@ -39,6 +39,7 @@ describe('compileSystemPrompt', () => {
     };
     const prompt = compileSystemPrompt(noScreening);
     expect(prompt).not.toContain('{{mandate_questions}}');
+    expect(prompt).not.toContain('Mandatory Screening');
   });
 
   it('renders per-phase guidance text', () => {
@@ -50,6 +51,40 @@ describe('compileSystemPrompt', () => {
     const prompt = compileSystemPrompt(fullConfig);
     expect(prompt).toContain('Ask follow-ups when answers are vague');
     expect(prompt).toContain("Don't give away answer hints");
+  });
+});
+
+describe('compileSystemPrompt — empty guidelines', () => {
+  it('does NOT emit a # Guidelines header when dos and donts are both empty', () => {
+    const noGuidelinesConfig: BuilderConfig = {
+      ...fullConfig,
+      dos: [],
+      donts: [],
+    };
+    const prompt = compileSystemPrompt(noGuidelinesConfig);
+    expect(prompt).not.toContain('# Guidelines');
+  });
+});
+
+describe('buildDynamicVariables', () => {
+  it('always returns the 5 required keys as strings even with minimal ctx', () => {
+    const minimalCtx = {
+      candidate: { first_name: 'Jo', last_name: 'Doe', email: 'jo@x.com' } as any,
+      application: {} as any,
+      job: { title: 'Dev' } as any,
+      agent: { interview_style: 'formal' } as any,
+    };
+    const vars = buildDynamicVariables(minimalCtx);
+    for (const k of [
+      'candidate_background_summary',
+      'candidate_talking_points',
+      'mandate_questions',
+      'interview_questions',
+      'call_context',
+    ]) {
+      expect(k in vars).toBe(true);
+      expect(typeof vars[k]).toBe('string');
+    }
   });
 });
 

@@ -24,6 +24,11 @@ export function buildDynamicVariables(ctx: PromptContext): Record<string, string
     job_title: ctx.job.title,
     job_location: [ctx.job.state, ctx.job.country].filter(Boolean).join(', '),
     company_name: '', // Will be filled by caller if available
+    candidate_background_summary: '',
+    candidate_talking_points: '',
+    mandate_questions: '',
+    interview_questions: '',
+    call_context: '',
   };
 
   // Build candidate background summary from screening results or resume
@@ -260,9 +265,11 @@ export function compileSystemPrompt(config: BuilderConfig): string {
 
   parts.push('---', '{{call_context}}', '');
 
-  parts.push(`# Guidelines`);
-  for (const d of config.dos) parts.push(`- ${d}`);
-  for (const d of config.donts) parts.push(`- ${d}`);
+  if (config.dos.length > 0 || config.donts.length > 0) {
+    parts.push(`# Guidelines`);
+    for (const d of config.dos) parts.push(`- ${d}`);
+    for (const d of config.donts) parts.push(`- ${d}`);
+  }
 
   // Drop empty lines produced by blank guidance fields, but keep intentional spacing.
   return parts.filter((p, i) => !(p === '' && parts[i - 1] === '')).join('\n');
