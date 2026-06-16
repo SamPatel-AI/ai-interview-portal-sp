@@ -656,7 +656,7 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
         .from('applications')
         .select(`
           id, job_id, mandate_questions, interview_questions, ai_screening_result,
-          jobs (id, title, description, skills, ai_agent_id,
+          jobs (id, title, description, skills, ai_agent_id, client_companies (name),
             ai_agents (id, retell_agent_id, interview_style, greeting_template, closing_template, evaluation_criteria, system_prompt))
         `)
         .eq('id', contextSourceAppId)
@@ -672,7 +672,7 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
         .from('applications')
         .select(`
           id, job_id, mandate_questions, interview_questions, ai_screening_result,
-          jobs (id, title, description, skills, ai_agent_id,
+          jobs (id, title, description, skills, ai_agent_id, client_companies (name),
             ai_agents (id, retell_agent_id, interview_style, greeting_template, closing_template, evaluation_criteria, system_prompt))
         `)
         .eq('candidate_id', candidate.id)
@@ -696,7 +696,7 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
     const dynamicVars = buildInboundContext({
       candidate,
       application,
-      job,
+      job: job ? { ...job, company_name: (job.client_companies as any)?.name } : job,
       agent,
       missedCall: missedCall || undefined,
       interruptedCall: interruptedCall || undefined,

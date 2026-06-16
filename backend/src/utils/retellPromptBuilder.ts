@@ -107,7 +107,7 @@ export function buildDynamicVariables(ctx: PromptContext): Record<string, string
 interface InboundContext {
   candidate: { first_name: string; last_name: string; email: string };
   application?: { mandate_questions?: string[]; interview_questions?: string[] } | null;
-  job?: { title?: string } | null;
+  job?: { title?: string; company_name?: string } | null;
   agent?: { interview_style?: string } | null;
   missedCall?: { transcript?: string } | null;
   interruptedCall?: { transcript?: string } | null;
@@ -124,6 +124,7 @@ export function buildInboundContext(ctx: InboundContext): Record<string, string>
     candidate_first_name: ctx.candidate.first_name,
     candidate_email: ctx.candidate.email,
     job_title: ctx.job?.title || 'the position',
+    company_name: ctx.job?.company_name || '',
   };
 
   if (ctx.application?.mandate_questions?.length) {

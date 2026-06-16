@@ -22,6 +22,10 @@ router.use(authenticate);
 // ─── Helpers ───────────────────────────────────────────────
 
 function postCallWebhookUrl(): string {
+  if (env.PUBLIC_API_URL) {
+    return `${env.PUBLIC_API_URL.replace(/\/$/, '')}/api/webhooks/retell/post-call`;
+  }
+  // Fallback when PUBLIC_API_URL is unset (e.g. local dev).
   return env.NODE_ENV === 'production'
     ? `${env.FRONTEND_URL.replace('://app.', '://api.')}/api/webhooks/retell/post-call`
     : `${env.FRONTEND_URL}/api/webhooks/retell/post-call`;
@@ -207,6 +211,7 @@ router.patch(
           is_active: body.is_active ?? existing.is_active,
         })
         .eq('id', req.params.id)
+        .eq('org_id', req.user!.org_id)
         .select()
         .single();
       if (error || !row) throw new AppError(500, 'Failed to update agent');
@@ -341,7 +346,8 @@ router.delete(
       await supabaseAdmin
         .from('ai_agents')
         .update({ is_active: false })
-        .eq('id', req.params.id);
+        .eq('id', req.params.id)
+        .eq('org_id', req.user!.org_id);
 
       res.json({ success: true, message: 'Agent deactivated' });
     } catch (err) {

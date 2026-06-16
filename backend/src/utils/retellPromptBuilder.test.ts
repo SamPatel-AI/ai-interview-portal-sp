@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileSystemPrompt, buildSampleVariables, buildDynamicVariables } from './retellPromptBuilder';
+import { compileSystemPrompt, buildSampleVariables, buildDynamicVariables, buildInboundContext } from './retellPromptBuilder';
 import type { BuilderConfig } from '../types';
 
 const fullConfig: BuilderConfig = {
@@ -101,5 +101,16 @@ describe('buildSampleVariables', () => {
     const vars = buildSampleVariables({});
     expect(vars.job_title).toBe('the position');
     expect(vars.company_name.length).toBeGreaterThan(0);
+  });
+});
+
+describe('buildInboundContext company_name', () => {
+  it('always includes company_name (empty when absent)', () => {
+    const vars = buildInboundContext({ candidate: { first_name: 'A', last_name: 'B', email: 'a@b.com' } } as any);
+    expect(vars.company_name).toBe('');
+  });
+  it('uses the provided company name', () => {
+    const vars = buildInboundContext({ candidate: { first_name: 'A', last_name: 'B', email: 'a@b.com' }, job: { title: 'Dev', company_name: 'Acme' } } as any);
+    expect(vars.company_name).toBe('Acme');
   });
 });
