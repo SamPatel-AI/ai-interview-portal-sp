@@ -1,4 +1,4 @@
-import { AIAgent, Application, Candidate, Job } from '../types';
+import { AIAgent, Application, Candidate, Job, BuilderConfig } from '../types';
 
 interface PromptContext {
   candidate: Candidate;
@@ -180,4 +180,90 @@ export function buildSystemPrompt(agent: AIAgent, variables: Record<string, stri
   }
 
   return prompt;
+}
+
+/**
+ * Compile a guided-builder config into a full system-prompt template.
+ * This OWNS inserting the {{dynamic_variables}} that the call layer fills
+ * per application — recruiters never type them. Disabled phases are omitted.
+ */
+export function compileSystemPrompt(config: BuilderConfig): string {
+  const toneLine: Record<string, string> = {
+    conversational: 'Keep a warm, conversational tone. Use the candidate\'s first name naturally.',
+    technical: 'Take a technical deep-dive tone. Probe for depth and push past surface answers.',
+    formal: 'Keep a professional, structured tone with clear transitions between topics.',
+  };
+
+  const parts: string[] = [];
+
+  parts.push(
+    `# Role`,
+    `You are ${config.interviewer_persona || 'a professional AI screening interviewer'} working on behalf of {{company_name}}.`,
+    `You are conducting a first-round screening interview for the {{job_title}} position.`,
+    '',
+    toneLine[config.tone] ?? toneLine.formal,
+    '',
+    config.company_blurb ? `About the company: ${config.company_blurb}` : `About the company: {{company_name}}.`,
+    '',
+    `# Candidate Info`,
+    `- Name: {{candidate_name}}`,
+    `- Email: {{candidate_email}}`,
+    `- Background: {{candidate_background_summary}}`,
+    '',
+    `IMPORTANT: Do NOT read questions from a list. Weave interview topics into natural conversation. If a topic is already answered, do not re-ask it. When an answer is vague, ask a follow-up before moving on.`,
+    '---',
+  );
+
+  if (config.phases.rapport.enabled) {
+    parts.push(
+      `## Phase — Rapport`,
+      config.greeting ? config.greeting : `Greet the candidate by first name, introduce yourself and the purpose of the call.`,
+      `Use these talking points to build rapport: {{candidate_talking_points}}`,
+      config.phases.rapport.guidance,
+      '',
+    );
+  }
+  if (config.phases.screening.enabled) {
+    parts.push(
+      `## Phase — Mandatory Screening`,
+      `Transition naturally, then confirm: {{mandate_questions}}`,
+      `Keep these brief and conversational — not a checklist.`,
+      config.phases.screening.guidance,
+      '',
+    );
+  }
+  if (config.phases.deep_dive.enabled) {
+    parts.push(
+      `## Phase — Deep-dive`,
+      `Explore 5-7 of these topics based on the conversation flow: {{interview_questions}}`,
+      `Ask follow-ups when answers are vague. Skip topics already covered.`,
+      config.phases.deep_dive.guidance,
+      '',
+    );
+  }
+  if (config.phases.candidate_qa.enabled) {
+    parts.push(
+      `## Phase — Candidate Questions`,
+      `Ask: "Before we wrap up, do you have any questions about the role or {{company_name}}?" Answer what you can; defer specifics to the recruiter.`,
+      config.phases.candidate_qa.guidance,
+      '',
+    );
+  }
+  if (config.phases.closing.enabled) {
+    parts.push(
+      `## Phase — Closing`,
+      config.closing ? config.closing : `Thank the candidate and let them know the recruitment team will follow up within 2-3 business days.`,
+      config.phases.closing.guidance,
+      '',
+    );
+  }
+
+  parts.push('---', '{{call_context}}', '');
+
+  parts.push(`# Guidelines`);
+  for (const d of config.dos) parts.push(`- ${d}`);
+  for (const d of config.donts) parts.push(`- ${d}`);
+
+  // Drop empty lines produced by blank guidance fields, but keep intentional spacing.
+  return parts.filter((p, i) => !(p === '' && parts[i - 1] === '')).join('\n');
 }
