@@ -42,6 +42,7 @@ const envSchema = z.object({
   SMTP_FROM: z.string().optional(),
 
   FRONTEND_URL: z.string().default('http://localhost:8082'),
+  PUBLIC_API_URL: z.string().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
