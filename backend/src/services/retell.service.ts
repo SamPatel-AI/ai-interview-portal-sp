@@ -200,14 +200,19 @@ export interface ImportedAgent {
 }
 
 /** Map a raw Retell agent object (and resolve its LLM prompt) to an ImportedAgent. */
-async function mapRetellAgentToImported(a: any): Promise<ImportedAgent> {
-  const llmId = a.response_engine?.llm_id ?? null;
+async function mapRetellAgentToImported(a: any, throwOnLlmError = false): Promise<ImportedAgent> {
+  const llmId = a.response_engine?.type === 'retell-llm' ? a.response_engine.llm_id ?? null : null;
   let prompt = '';
   if (llmId) {
-    try {
+    if (throwOnLlmError) {
       const llmObj = await retellClient.llm.retrieve(llmId);
       prompt = (llmObj as any).general_prompt ?? '';
-    } catch { /* leave prompt empty if the LLM cannot be fetched */ }
+    } else {
+      try {
+        const llmObj = await retellClient.llm.retrieve(llmId);
+        prompt = (llmObj as any).general_prompt ?? '';
+      } catch { /* import is lenient: leave prompt empty if the LLM can't be fetched */ }
+    }
   }
   return {
     retell_agent_id: a.agent_id,
@@ -233,5 +238,8 @@ export async function fetchRetellAgentsForImport(): Promise<ImportedAgent[]> {
 /** Retrieve a single Retell agent (and its LLM prompt) for a Retell→portal pull. */
 export async function fetchRetellAgentForPull(retellAgentId: string): Promise<ImportedAgent> {
   const a = await retellClient.agent.retrieve(retellAgentId);
-  return mapRetellAgentToImported(a);
+  if (a.response_engine?.type !== 'retell-llm') {
+    throw new Error(`Cannot pull: Retell agent ${retellAgentId} does not use a retell-llm response engine.`);
+  }
+  return mapRetellAgentToImported(a, true); // pull is strict — surface LLM-fetch failures, never silently blank the prompt
 }

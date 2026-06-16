@@ -96,6 +96,17 @@ describe('fetchRetellAgentForPull', () => {
       voice_id: 'v2', language: 'en-GB', max_call_duration_sec: 900, system_prompt: 'EDITED IN RETELL',
     });
   });
+
+  it('fetchRetellAgentForPull throws for a non-retell-llm agent (no silent blank)', async () => {
+    agent.retrieve.mockResolvedValue({ agent_id: 'ag1', agent_name: 'X', response_engine: { type: 'conversation-flow', conversation_flow_id: 'cf1' } });
+    await expect(fetchRetellAgentForPull('ag1')).rejects.toThrow(/retell-llm/);
+  });
+
+  it('fetchRetellAgentForPull propagates an LLM-fetch failure instead of blanking the prompt', async () => {
+    agent.retrieve.mockResolvedValue({ agent_id: 'ag2', agent_name: 'Y', voice_id: 'v', language: 'en-US', max_call_duration_ms: 600000, response_engine: { type: 'retell-llm', llm_id: 'l2' } });
+    llm.retrieve.mockRejectedValueOnce(new Error('llm-down'));
+    await expect(fetchRetellAgentForPull('ag2')).rejects.toThrow('llm-down');
+  });
 });
 
 describe('fetchRetellAgentsForImport', () => {
