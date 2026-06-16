@@ -16,60 +16,6 @@ export const POST_CALL_ANALYSIS_DATA = [
 
 // ─── Agent Management ──────────────────────────────────────
 
-interface CreateAgentParams {
-  name: string;
-  systemPrompt: string;
-  voiceId: string;
-  language?: string;
-  maxCallDurationSec?: number;
-  interviewStyle?: string;
-  greetingTemplate?: string;
-  webhookUrl: string;
-}
-
-/** @deprecated Use syncAgentToRetell — this creates an agent with an empty LLM (llm_id: '') and does not set the prompt. */
-export async function createRetellAgent(params: CreateAgentParams): Promise<string> {
-  try {
-    const agent = await retellClient.agent.create({
-      agent_name: params.name,
-      response_engine: {
-        type: 'retell-llm',
-        llm_id: '', // Will be auto-created
-      },
-      voice_id: params.voiceId,
-      language: (params.language || 'en-US') as any,
-      max_call_duration_ms: (params.maxCallDurationSec || 1200) * 1000,
-      post_call_analysis_data: POST_CALL_ANALYSIS_DATA as any,
-      webhook_url: params.webhookUrl,
-      voicemail_option: 'machine_detection_with_beep' as any,
-    });
-
-    logger.info(`Created Retell agent: ${agent.agent_id}`);
-    return agent.agent_id;
-  } catch (err) {
-    logger.error('Failed to create Retell agent:', err);
-    throw err;
-  }
-}
-
-/** @deprecated Use syncAgentToRetell — this creates an agent with an empty LLM (llm_id: '') and does not set the prompt. */
-export async function updateRetellAgent(agentId: string, params: Partial<CreateAgentParams>): Promise<void> {
-  try {
-    const updateData: Record<string, unknown> = {};
-
-    if (params.name) updateData.agent_name = params.name;
-    if (params.voiceId) updateData.voice_id = params.voiceId;
-    if (params.language) updateData.language = params.language;
-    if (params.maxCallDurationSec) updateData.max_call_duration_ms = params.maxCallDurationSec * 1000;
-
-    await retellClient.agent.update(agentId, updateData as any);
-    logger.info(`Updated Retell agent: ${agentId}`);
-  } catch (err) {
-    logger.error(`Failed to update Retell agent ${agentId}:`, err);
-    throw err;
-  }
-}
-
 export async function deleteRetellAgent(agentId: string, llmId?: string | null): Promise<void> {
   try {
     await retellClient.agent.delete(agentId);
