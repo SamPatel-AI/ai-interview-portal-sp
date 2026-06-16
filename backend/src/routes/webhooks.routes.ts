@@ -336,6 +336,14 @@ router.post('/retell/post-call', verifyRetellSignature, async (req: Request, res
 
     const { event, call } = body;
 
+    // Test calls (from the agent builder) carry metadata.test and must not
+    // create call records or evaluations.
+    if (call?.metadata?.test === 'true') {
+      logger.info(`Skipping DB write for test call ${call?.call_id}`);
+      res.json({ received: true, test: true });
+      return;
+    }
+
     if (event !== 'call_analyzed' && event !== 'call_ended') {
       res.json({ received: true });
       return;

@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { supabaseAdmin } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
@@ -7,8 +8,9 @@ import {
   syncAgentToRetell,
   deleteRetellAgent,
   listVoices,
+  createOutboundCall,
 } from '../services/retell.service';
-import { compileSystemPrompt } from '../utils/retellPromptBuilder';
+import { compileSystemPrompt, buildSampleVariables } from '../utils/retellPromptBuilder';
 import { agentBodySchema, updateAgentBodySchema } from './agents.schema';
 import { env } from '../config/env';
 
@@ -235,6 +237,36 @@ router.post('/:id/sync', requireRole('admin', 'recruiter'), async (req: Request,
 
     if (sync.sync_status === 'error') throw new AppError(502, `Retell sync failed: ${sync.sync_error}`);
     res.json({ success: true, data: synced });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/agents/:id/test-call ───────────────────────
+
+const testCallSchema = z.object({ phone_number: z.string().min(8).max(20) });
+
+router.post('/:id/test-call', requireRole('admin', 'recruiter'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { phone_number } = testCallSchema.parse(req.body);
+    const { data: row, error } = await supabaseAdmin
+      .from('ai_agents')
+      .select('retell_agent_id, name, client_companies(name)')
+      .eq('id', req.params.id)
+      .eq('org_id', req.user!.org_id)
+      .single();
+    if (error || !row) throw new AppError(404, 'Agent not found');
+    if (!row.retell_agent_id) throw new AppError(409, 'Sync the agent first before testing.');
+
+    const companyName = (row as any).client_companies?.name as string | undefined;
+    const vars = buildSampleVariables({ companyName });
+
+    const call = await createOutboundCall({
+      agentId: row.retell_agent_id,
+      toNumber: phone_number,
+      dynamicVariables: vars,
+      metadata: { test: 'true' },
+    });
+
+    res.json({ success: true, data: { call_id: call.callId, status: call.status } });
   } catch (err) { next(err); }
 });
 
