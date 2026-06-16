@@ -267,3 +267,30 @@ export function compileSystemPrompt(config: BuilderConfig): string {
   // Drop empty lines produced by blank guidance fields, but keep intentional spacing.
   return parts.filter((p, i) => !(p === '' && parts[i - 1] === '')).join('\n');
 }
+
+interface SampleContext {
+  jobTitle?: string;
+  companyName?: string;
+}
+
+/**
+ * Build realistic sample dynamic variables for a TEST call, so a recruiter
+ * can hear the agent before using it on real candidates. Covers every key
+ * compileSystemPrompt / the default prompt reference.
+ */
+export function buildSampleVariables(ctx: SampleContext): Record<string, string> {
+  return {
+    candidate_name: 'Alex Sample',
+    candidate_first_name: 'Alex',
+    candidate_email: 'alex.sample@example.com',
+    candidate_background_summary: 'Five years of relevant experience with strong communication skills.',
+    candidate_talking_points: 'Recently led a cross-functional project. Background in the target industry.',
+    job_title: ctx.jobTitle || 'the position',
+    company_name: ctx.companyName || 'our company',
+    job_location: 'Remote',
+    interview_style_instructions: 'Style: Warm and conversational.',
+    mandate_questions: '1. Are you authorized to work in the country?\n2. What are your salary expectations?',
+    interview_questions: 'Topic: Recent project experience — Explore through natural conversation\nTopic: Problem-solving approach — Explore through natural conversation',
+    call_context: 'This is a TEST call to preview the agent. Treat the caller as a sample candidate.',
+  };
+}

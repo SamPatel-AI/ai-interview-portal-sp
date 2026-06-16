@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileSystemPrompt } from './retellPromptBuilder';
+import { compileSystemPrompt, buildSampleVariables } from './retellPromptBuilder';
 import type { BuilderConfig } from '../types';
 
 const fullConfig: BuilderConfig = {
@@ -50,5 +50,21 @@ describe('compileSystemPrompt', () => {
     const prompt = compileSystemPrompt(fullConfig);
     expect(prompt).toContain('Ask follow-ups when answers are vague');
     expect(prompt).toContain("Don't give away answer hints");
+  });
+});
+
+describe('buildSampleVariables', () => {
+  it('provides every key the compiled prompt references', () => {
+    const vars = buildSampleVariables({ jobTitle: 'Senior Developer', companyName: 'Acme Co' });
+    for (const k of ['candidate_name', 'candidate_first_name', 'candidate_email', 'candidate_background_summary', 'candidate_talking_points', 'job_title', 'company_name', 'mandate_questions', 'interview_questions', 'call_context']) {
+      expect(vars[k]).toBeDefined();
+      expect(vars[k].length).toBeGreaterThan(0);
+    }
+  });
+
+  it('falls back to generic title/company when none given', () => {
+    const vars = buildSampleVariables({});
+    expect(vars.job_title).toBe('the position');
+    expect(vars.company_name.length).toBeGreaterThan(0);
   });
 });
