@@ -27,6 +27,7 @@ interface CreateAgentParams {
   webhookUrl: string;
 }
 
+/** @deprecated Use syncAgentToRetell — this creates an agent with an empty LLM (llm_id: '') and does not set the prompt. */
 export async function createRetellAgent(params: CreateAgentParams): Promise<string> {
   try {
     const agent = await retellClient.agent.create({
@@ -51,6 +52,7 @@ export async function createRetellAgent(params: CreateAgentParams): Promise<stri
   }
 }
 
+/** @deprecated Use syncAgentToRetell — this creates an agent with an empty LLM (llm_id: '') and does not set the prompt. */
 export async function updateRetellAgent(agentId: string, params: Partial<CreateAgentParams>): Promise<void> {
   try {
     const updateData: Record<string, unknown> = {};
@@ -180,14 +182,14 @@ type SyncableAgent = Pick<AIAgent,
  * captured in sync_status='error' so the row still saves and can be retried.
  */
 export async function syncAgentToRetell(agent: SyncableAgent, webhookUrl: string): Promise<SyncResult> {
-  const generalPrompt = agent.builder_config
-    ? compileSystemPrompt(agent.builder_config)
-    : agent.system_prompt;
-
   let llmId = agent.retell_llm_id;
   let agentId = agent.retell_agent_id;
 
   try {
+    const generalPrompt = agent.builder_config
+      ? compileSystemPrompt(agent.builder_config)
+      : agent.system_prompt;
+
     if (!llmId) {
       const created = await retellClient.llm.create({ general_prompt: generalPrompt } as any);
       llmId = created.llm_id;
@@ -213,6 +215,8 @@ export async function syncAgentToRetell(agent: SyncableAgent, webhookUrl: string
         voice_id: agent.voice_id,
         language: (agent.language || 'en-US') as any,
         max_call_duration_ms: (agent.max_call_duration_sec || 1200) * 1000,
+        webhook_url: webhookUrl,
+        post_call_analysis_data: POST_CALL_ANALYSIS_DATA as any,
       } as any);
     }
 

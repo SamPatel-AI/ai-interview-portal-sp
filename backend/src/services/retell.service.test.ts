@@ -59,6 +59,7 @@ describe('syncAgentToRetell', () => {
     await syncAgentToRetell(guided, 'http://hook');
     const passedPrompt = llm.create.mock.calls[0][0].general_prompt as string;
     expect(passedPrompt).toContain('friendly recruiter');
+    expect(passedPrompt).toContain('{{candidate_name}}');
   });
 
   it('returns error status with message when Retell throws', async () => {
@@ -66,5 +67,20 @@ describe('syncAgentToRetell', () => {
     const res = await syncAgentToRetell(baseAgent, 'http://hook');
     expect(res.sync_status).toBe('error');
     expect(res.sync_error).toContain('boom');
+  });
+
+  it('preserves a newly-created llm_id in error result when agent.create fails', async () => {
+    agent.create.mockRejectedValueOnce(new Error('agent-boom'));
+    const res = await syncAgentToRetell(baseAgent, 'http://hook');
+    expect(res.retell_llm_id).toBe('llm_new');
+    expect(res.retell_agent_id).toBeNull();
+    expect(res.sync_status).toBe('error');
+  });
+
+  it('does not throw when builder_config is malformed — returns error status', async () => {
+    const bad = { ...baseAgent, builder_config: { tone: 'conversational' } as any }; // missing phases
+    const res = await syncAgentToRetell(bad, 'http://hook');
+    expect(res.sync_status).toBe('error');
+    expect(res.sync_error).toBeTruthy();
   });
 });
