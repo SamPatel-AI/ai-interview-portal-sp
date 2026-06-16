@@ -161,7 +161,7 @@ export default function AgentBuilder({ open, onOpenChange, agentId }: Props) {
             onPull={() => pullMut.mutateAsync(agent.id).then(() => refetchAgent())}
             onTestCall={(phone) => testMut.mutate({ id: agent.id, phone_number: phone })}
             onSetDefault={() => defaultMut.mutate(agent.id)}
-            onSave={(payload) => updateMut.mutateAsync({ id: agent.id, ...payload }).then(() => refetchAgent())}
+            onSave={async (payload) => { await updateMut.mutateAsync({ id: agent.id, ...payload }); await refetchAgent(); }}
             saving={updateMut.isPending}
             syncing={syncMut.isPending}
             pulling={pullMut.isPending}
