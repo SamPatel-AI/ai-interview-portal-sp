@@ -109,6 +109,7 @@ export interface AIAgent {
   closing_template: string | null;
   fallback_behavior: Record<string, unknown>;
   is_active: boolean;
+  is_default: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;

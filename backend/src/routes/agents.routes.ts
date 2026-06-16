@@ -247,6 +247,39 @@ router.post('/:id/sync', requireRole('admin', 'recruiter'), async (req: Request,
   } catch (err) { next(err); }
 });
 
+// ─── POST /api/agents/:id/default ─────────────────────────
+
+router.post('/:id/default', requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Verify the agent belongs to this org.
+    const { data: row, error } = await supabaseAdmin
+      .from('ai_agents')
+      .select('id')
+      .eq('id', req.params.id)
+      .eq('org_id', req.user!.org_id)
+      .single();
+    if (error || !row) throw new AppError(404, 'Agent not found');
+
+    // Clear any existing default in this org, then set the new one.
+    await supabaseAdmin
+      .from('ai_agents')
+      .update({ is_default: false })
+      .eq('org_id', req.user!.org_id)
+      .eq('is_default', true);
+
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('ai_agents')
+      .update({ is_default: true })
+      .eq('id', req.params.id)
+      .eq('org_id', req.user!.org_id)
+      .select()
+      .single();
+    if (updErr || !updated) throw new AppError(500, 'Failed to set default agent');
+
+    res.json({ success: true, data: updated });
+  } catch (err) { next(err); }
+});
+
 // ─── POST /api/agents/:id/test-call ───────────────────────
 
 const testCallSchema = z.object({ phone_number: z.string().min(8).max(20) });
