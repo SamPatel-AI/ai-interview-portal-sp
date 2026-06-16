@@ -25,13 +25,16 @@ const updateCompanySchema = createCompanySchema.partial();
 
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { search } = req.query;
+    const { search, days, scope } = req.query;
+
+    const daysNum = [30, 60, 90].includes(Number(days)) ? Number(days) : 30;
+    const scopeVal = scope === 'all' ? 'all' : 'active';
+    const since = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000).toISOString();
 
     let query = supabaseAdmin
       .from('client_companies')
-      .select('*, jobs (id), ai_agents (id)', { count: 'exact' })
-      .eq('org_id', req.user!.org_id)
-      .order('name');
+      .select('*, ai_agents (id)', { count: 'exact' })
+      .eq('org_id', req.user!.org_id);
 
     if (search) {
       query = query.ilike('name', `%${search}%`);
@@ -41,14 +44,41 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     if (error) throw new AppError(500, 'Failed to fetch companies');
 
-    // Add jobs_count and agents_count for the frontend
-    const enriched = (data ?? []).map(({ jobs, ai_agents, ...company }) => ({
+    const companies = data ?? [];
+    const companyIds = companies.map(c => c.id);
+
+    // Count open jobs per company within the selected window
+    let jobsCountMap: Record<string, number> = {};
+    if (companyIds.length > 0) {
+      const { data: jobs, error: jobsError } = await supabaseAdmin
+        .from('jobs')
+        .select('id, client_company_id')
+        .eq('org_id', req.user!.org_id)
+        .eq('status', 'open')
+        .gte('created_at', since)
+        .in('client_company_id', companyIds);
+
+      if (jobsError) throw new AppError(500, 'Failed to fetch job counts');
+
+      for (const job of jobs || []) {
+        jobsCountMap[job.client_company_id] = (jobsCountMap[job.client_company_id] || 0) + 1;
+      }
+    }
+
+    // Enrich with counts and sort by open jobs descending
+    let enriched = companies.map(({ ai_agents, ...company }) => ({
       ...company,
-      jobs_count: Array.isArray(jobs) ? jobs.length : 0,
+      jobs_count: jobsCountMap[company.id] || 0,
       agents_count: Array.isArray(ai_agents) ? ai_agents.length : 0,
     }));
 
-    res.json({ success: true, data: enriched, total: count });
+    enriched.sort((a, b) => b.jobs_count - a.jobs_count);
+
+    if (scopeVal === 'active') {
+      enriched = enriched.filter(c => c.jobs_count > 0);
+    }
+
+    res.json({ success: true, data: enriched, total: enriched.length });
   } catch (err) {
     next(err);
   }
