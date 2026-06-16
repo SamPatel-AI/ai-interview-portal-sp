@@ -37,4 +37,6 @@ export const agentBodySchema = z.object({
   { message: 'Provide either builder_config (guided) or system_prompt (legacy).' },
 );
 
+// Update uses the same full-body shape as create (see PATCH handler note): callers
+// submit the complete agent definition, not a partial patch.
 export const updateAgentBodySchema = agentBodySchema;

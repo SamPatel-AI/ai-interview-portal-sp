@@ -24,6 +24,27 @@ function postCallWebhookUrl(): string {
     : `${env.FRONTEND_URL}/api/webhooks/retell/post-call`;
 }
 
+/**
+ * Persist a sync result to the agent row. Scoped by org_id for defense-in-depth
+ * (the row was already org-verified upstream, but service-role queries bypass RLS).
+ */
+async function applySyncResult(agentId: string, orgId: string, sync: Awaited<ReturnType<typeof syncAgentToRetell>>) {
+  const { data } = await supabaseAdmin
+    .from('ai_agents')
+    .update({
+      retell_llm_id: sync.retell_llm_id,
+      retell_agent_id: sync.retell_agent_id,
+      sync_status: sync.sync_status,
+      sync_error: sync.sync_error,
+      last_synced_at: sync.last_synced_at,
+    })
+    .eq('id', agentId)
+    .eq('org_id', orgId)
+    .select()
+    .single();
+  return data;
+}
+
 // ─── GET /api/agents/voices ────────────────────────────────
 // List available Retell voices (must be before /:id)
 
@@ -130,18 +151,7 @@ router.post(
       if (error || !row) throw new AppError(500, 'Failed to save agent');
 
       const sync = await syncAgentToRetell(row, postCallWebhookUrl());
-      const { data: synced } = await supabaseAdmin
-        .from('ai_agents')
-        .update({
-          retell_llm_id: sync.retell_llm_id,
-          retell_agent_id: sync.retell_agent_id,
-          sync_status: sync.sync_status,
-          sync_error: sync.sync_error,
-          last_synced_at: sync.last_synced_at,
-        })
-        .eq('id', row.id)
-        .select()
-        .single();
+      const synced = await applySyncResult(row.id, req.user!.org_id, sync);
 
       await supabaseAdmin.from('activity_log').insert({
         org_id: req.user!.org_id, user_id: req.user!.id,
@@ -158,6 +168,9 @@ router.post(
 
 // ─── PATCH /api/agents/:id ─────────────────────────────────
 
+// NOTE: PATCH expects the FULL agent definition (the builder wizard always submits
+// the whole form). It recompiles the prompt and re-syncs to Retell, and writes
+// builder_config wholesale — a partial body would wipe builder_config / system_prompt.
 router.patch(
   '/:id',
   requireRole('admin', 'recruiter'),
@@ -196,18 +209,7 @@ router.patch(
       if (error || !row) throw new AppError(500, 'Failed to update agent');
 
       const sync = await syncAgentToRetell(row, postCallWebhookUrl());
-      const { data: synced } = await supabaseAdmin
-        .from('ai_agents')
-        .update({
-          retell_llm_id: sync.retell_llm_id,
-          retell_agent_id: sync.retell_agent_id,
-          sync_status: sync.sync_status,
-          sync_error: sync.sync_error,
-          last_synced_at: sync.last_synced_at,
-        })
-        .eq('id', row.id)
-        .select()
-        .single();
+      const synced = await applySyncResult(row.id, req.user!.org_id, sync);
 
       res.json({ success: true, data: synced ?? row });
     } catch (err) {
@@ -229,18 +231,7 @@ router.post('/:id/sync', requireRole('admin', 'recruiter'), async (req: Request,
     if (error || !row) throw new AppError(404, 'Agent not found');
 
     const sync = await syncAgentToRetell(row, postCallWebhookUrl());
-    const { data: synced } = await supabaseAdmin
-      .from('ai_agents')
-      .update({
-        retell_llm_id: sync.retell_llm_id,
-        retell_agent_id: sync.retell_agent_id,
-        sync_status: sync.sync_status,
-        sync_error: sync.sync_error,
-        last_synced_at: sync.last_synced_at,
-      })
-      .eq('id', row.id)
-      .select()
-      .single();
+    const synced = await applySyncResult(row.id, req.user!.org_id, sync);
 
     if (sync.sync_status === 'error') throw new AppError(502, `Retell sync failed: ${sync.sync_error}`);
     res.json({ success: true, data: synced });
