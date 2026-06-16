@@ -14,6 +14,7 @@ Paste the prompt below into Lovable. It rebuilds the agent creation/edit experie
 - `POST /api/agents/:id/sync` — manual retry; returns 502 if Retell sync still fails.
 - `POST /api/agents/:id/pull` — pull the agent's current state FROM Retell, overwriting the portal copy. Returns the updated agent (with `builder_config: null` — pulling converts a guided agent to raw-prompt mode). 409 if the agent isn't linked to Retell yet.
 - `POST /api/agents/:id/test-call` — body `{ phone_number }`. 409 if the agent isn't synced yet.
+- `POST /api/agents/:id/default` (admin) — makes this agent the org's default; clears any previous default. Each agent row has an `is_default` boolean. The default agent is used for any job with no specific agent assigned.
 - `POST /api/agents/import` — admin only; returns `{ imported, skipped }`.
 - `GET /api/agents/voices`, `GET /api/companies` — existing.
 
@@ -90,8 +91,13 @@ Rebuild the AI Agent creation/edit experience as a **guided multi-step wizard** 
 ### Legacy / imported agents
 - When `GET /api/agents/:id` returns `builder_config === null` (imported from Retell or legacy), do NOT open the wizard. Open a simple editor with: a raw `system_prompt` textarea, the basic fields (name, voice, language, duration, company, active), the sync badge + Retry-sync, and the test-call control. Add a note: "Imported from Retell — editing the raw prompt." On save, PATCH with `system_prompt` (not `builder_config`).
 
+### Default agent
+- Each agent has an `is_default` boolean (from `GET /api/agents`). Show a **"Default"** badge on the default agent in the list and in the builder header.
+- Add a **"Set as default"** action (admin only) on each non-default agent — POSTs `/api/agents/:id/default`, then refreshes so the badge moves. Exactly one agent is default per org (the backend enforces it).
+- Wherever a recruiter assigns an agent to a job, **pre-select the `is_default` agent** by default so the most effective general interviewer is chosen unless they pick a specific one.
+
 ### Agents list page
-- Show each agent's sync-status badge (same mapping as above).
+- Show each agent's sync-status badge (same mapping as above) and the "Default" badge.
 - Add an admin-only **"Import from Retell"** button that POSTs `/api/agents/import`, then toasts the result (`Imported {imported}, skipped {skipped}`) and refreshes the list.
 
 ### Constraints
