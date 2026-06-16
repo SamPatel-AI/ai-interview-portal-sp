@@ -9,6 +9,7 @@ import {
   deleteRetellAgent,
   listVoices,
   createOutboundCall,
+  fetchRetellAgentsForImport,
 } from '../services/retell.service';
 import { compileSystemPrompt, buildSampleVariables } from '../utils/retellPromptBuilder';
 import { agentBodySchema, updateAgentBodySchema } from './agents.schema';
@@ -267,6 +268,47 @@ router.post('/:id/test-call', requireRole('admin', 'recruiter'), async (req: Req
     });
 
     res.json({ success: true, data: { call_id: call.callId, status: call.status } });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/agents/import ──────────────────────────────
+
+router.post('/import', requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const remote = await fetchRetellAgentsForImport();
+
+    const { data: existingRows } = await supabaseAdmin
+      .from('ai_agents')
+      .select('retell_agent_id')
+      .eq('org_id', req.user!.org_id)
+      .not('retell_agent_id', 'is', null);
+    const linked = new Set((existingRows ?? []).map((r: any) => r.retell_agent_id));
+
+    let imported = 0;
+    let skipped = 0;
+    for (const a of remote) {
+      if (linked.has(a.retell_agent_id)) { skipped++; continue; }
+      const { error } = await supabaseAdmin.from('ai_agents').insert({
+        org_id: req.user!.org_id,
+        created_by: req.user!.id,
+        name: a.name,
+        retell_agent_id: a.retell_agent_id,
+        retell_llm_id: a.retell_llm_id,
+        system_prompt: a.system_prompt,
+        builder_config: null,
+        voice_id: a.voice_id,
+        language: a.language,
+        max_call_duration_sec: a.max_call_duration_sec,
+        interview_style: 'conversational',
+        is_active: true,
+        sync_status: 'imported',
+        last_synced_at: new Date().toISOString(),
+      });
+      if (error) { skipped++; continue; }
+      imported++;
+    }
+
+    res.json({ success: true, data: { imported, skipped } });
   } catch (err) { next(err); }
 });
 

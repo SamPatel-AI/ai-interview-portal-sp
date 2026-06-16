@@ -186,3 +186,41 @@ export async function syncAgentToRetell(agent: SyncableAgent, webhookUrl: string
     };
   }
 }
+
+// ─── Import from Retell ─────────────────────────────────────
+
+export interface ImportedAgent {
+  retell_agent_id: string;
+  retell_llm_id: string | null;
+  name: string;
+  voice_id: string;
+  language: string;
+  max_call_duration_sec: number;
+  system_prompt: string;
+}
+
+/** List all Retell agents and resolve each one's LLM general_prompt. */
+export async function fetchRetellAgentsForImport(): Promise<ImportedAgent[]> {
+  const agents = await retellClient.agent.list();
+  const out: ImportedAgent[] = [];
+  for (const a of agents as any[]) {
+    const llmId = a.response_engine?.llm_id ?? null;
+    let prompt = '';
+    if (llmId) {
+      try {
+        const llmObj = await retellClient.llm.retrieve(llmId);
+        prompt = (llmObj as any).general_prompt ?? '';
+      } catch { /* leave prompt empty if the LLM cannot be fetched */ }
+    }
+    out.push({
+      retell_agent_id: a.agent_id,
+      retell_llm_id: llmId,
+      name: a.agent_name ?? 'Imported agent',
+      voice_id: a.voice_id ?? '',
+      language: a.language ?? 'en-US',
+      max_call_duration_sec: a.max_call_duration_ms ? Math.round(a.max_call_duration_ms / 1000) : 1200,
+      system_prompt: prompt,
+    });
+  }
+  return out;
+}

@@ -11,7 +11,7 @@ const { llm, agent } = vi.hoisted(() => {
 vi.mock('../config/retell', () => ({ retellClient: { llm, agent, voice: { list: vi.fn() }, call: {}, phoneNumber: {} } }));
 vi.mock('../config/env', () => ({ env: { RETELL_FROM_NUMBER: '+10000000000', NODE_ENV: 'test', FRONTEND_URL: 'http://localhost:8082' } }));
 
-import { syncAgentToRetell } from './retell.service';
+import { syncAgentToRetell, fetchRetellAgentsForImport } from './retell.service';
 
 const baseAgent = {
   id: 'a1', name: 'Test', system_prompt: 'PROMPT', builder_config: null,
@@ -82,5 +82,20 @@ describe('syncAgentToRetell', () => {
     const res = await syncAgentToRetell(bad, 'http://hook');
     expect(res.sync_status).toBe('error');
     expect(res.sync_error).toBeTruthy();
+  });
+});
+
+describe('fetchRetellAgentsForImport', () => {
+  it('returns agents with their llm general_prompt resolved', async () => {
+    agent.list.mockResolvedValue([
+      { agent_id: 'ag1', agent_name: 'One', voice_id: 'v1', language: 'en-US', max_call_duration_ms: 600000, response_engine: { type: 'retell-llm', llm_id: 'l1' } },
+    ]);
+    llm.retrieve.mockResolvedValue({ llm_id: 'l1', general_prompt: 'HELLO PROMPT' });
+
+    const result = await fetchRetellAgentsForImport();
+    expect(result[0]).toMatchObject({
+      retell_agent_id: 'ag1', retell_llm_id: 'l1', name: 'One',
+      voice_id: 'v1', language: 'en-US', max_call_duration_sec: 600, system_prompt: 'HELLO PROMPT',
+    });
   });
 });
