@@ -5,7 +5,10 @@ export interface Company {
   description: string | null;
   settings: Record<string, unknown>;
   created_at: string;
+  jobs_count?: number;
+  agents_count?: number;
 }
+
 
 export interface CompanyDetail extends Company {
   jobs: Array<{ id: string; title: string; status: string }>;

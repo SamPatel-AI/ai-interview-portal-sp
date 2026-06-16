@@ -5,13 +5,14 @@ import * as service from '../services/companies.service';
 import type { CreateCompanyInput } from '../types';
 import { STALE } from '@/lib/constants';
 
-export function useCompanies(params: { search?: string } = {}) {
+export function useCompanies(params: { search?: string; days?: number; scope?: string } = {}) {
   return useQuery({
     queryKey: companyKeys.list(params),
     queryFn: () => service.fetchCompanies(params),
     staleTime: STALE.LONG,
   });
 }
+
 
 export function useCompany(id: string | null) {
   return useQuery({

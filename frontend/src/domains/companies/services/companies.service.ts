@@ -1,11 +1,14 @@
 import { apiRequest, type ApiResponse } from '@/lib/api';
 import type { Company, CompanyDetail, CreateCompanyInput } from '../types';
 
-export async function fetchCompanies(params: { search?: string } = {}) {
+export async function fetchCompanies(params: { search?: string; days?: number; scope?: string } = {}) {
   const qs = new URLSearchParams();
   if (params.search) qs.set('search', params.search);
+  if (params.days) qs.set('days', String(params.days));
+  if (params.scope) qs.set('scope', params.scope);
   return apiRequest<ApiResponse<Company[]>>(`/api/companies?${qs}`);
 }
+
 
 export async function fetchCompany(id: string) {
   return apiRequest<ApiResponse<CompanyDetail>>(`/api/companies/${id}`);
