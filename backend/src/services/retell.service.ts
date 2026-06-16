@@ -158,6 +158,11 @@ export async function syncAgentToRetell(agent: SyncableAgent, webhookUrl: string
     } else {
       await retellClient.agent.update(agentId, {
         agent_name: agent.name,
+        // Re-point the agent at the LLM we just created/updated. Critical for agents
+        // created before this feature (had a retell_agent_id but no retell_llm_id):
+        // without this they'd stay linked to their original empty LLM and the prompt
+        // would never take effect. For normal re-syncs llm_id is unchanged (no-op).
+        response_engine: { type: 'retell-llm', llm_id: llmId },
         voice_id: agent.voice_id,
         language: (agent.language || 'en-US') as any,
         max_call_duration_ms: (agent.max_call_duration_sec || 1200) * 1000,

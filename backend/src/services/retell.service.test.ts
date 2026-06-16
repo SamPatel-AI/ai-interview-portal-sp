@@ -47,6 +47,19 @@ describe('syncAgentToRetell', () => {
     expect(res.sync_status).toBe('synced');
   });
 
+  it('relinks an existing agent to a newly-created LLM (legacy agent: has agent id, no llm id)', async () => {
+    const legacy = { ...baseAgent, retell_llm_id: null, retell_agent_id: 'agent_x' };
+    const res = await syncAgentToRetell(legacy, 'http://hook');
+    // No llm id → a fresh LLM is created…
+    expect(llm.create).toHaveBeenCalledOnce();
+    // …and the existing agent is re-pointed at it via response_engine.
+    expect(agent.update).toHaveBeenCalledWith('agent_x', expect.objectContaining({
+      response_engine: { type: 'retell-llm', llm_id: 'llm_new' },
+    }));
+    expect(res.retell_llm_id).toBe('llm_new');
+    expect(res.sync_status).toBe('synced');
+  });
+
   it('compiles the prompt from builder_config when present', async () => {
     const guided = {
       ...baseAgent,
