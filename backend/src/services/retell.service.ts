@@ -1,7 +1,18 @@
 import { retellClient } from '../config/retell';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
-import { AIAgent } from '../types';
+import { AIAgent, SyncStatus } from '../types';
+import { compileSystemPrompt } from '../utils/retellPromptBuilder';
+
+// ─── Shared Constants ──────────────────────────────────────
+
+export const POST_CALL_ANALYSIS_DATA = [
+  { name: 'call_summary', type: 'string' as any, description: 'A detailed summary of the interview call including key points discussed.' },
+  { name: 'call_successful', type: 'boolean' as any, description: 'Whether the interview was completed successfully (candidate answered questions).' },
+  { name: 'candidate_sentiment', type: 'enum' as any, description: 'Overall sentiment of the candidate during the call.', choices: ['Positive', 'Neutral', 'Negative'] },
+  { name: 'callback_requested', type: 'boolean' as any, description: 'Whether the candidate asked to be called back later.' },
+  { name: 'callback_time_minutes', type: 'number' as any, description: 'If callback was requested, how many minutes later the candidate wants to be called. 0 if not requested.' },
+];
 
 // ─── Agent Management ──────────────────────────────────────
 
@@ -27,34 +38,7 @@ export async function createRetellAgent(params: CreateAgentParams): Promise<stri
       voice_id: params.voiceId,
       language: (params.language || 'en-US') as any,
       max_call_duration_ms: (params.maxCallDurationSec || 1200) * 1000,
-      post_call_analysis_data: [
-        {
-          name: 'call_summary',
-          type: 'string' as any,
-          description: 'A detailed summary of the interview call including key points discussed.',
-        },
-        {
-          name: 'call_successful',
-          type: 'boolean' as any,
-          description: 'Whether the interview was completed successfully (candidate answered questions).',
-        },
-        {
-          name: 'candidate_sentiment',
-          type: 'enum' as any,
-          description: 'Overall sentiment of the candidate during the call.',
-          choices: ['Positive', 'Neutral', 'Negative'],
-        },
-        {
-          name: 'callback_requested',
-          type: 'boolean' as any,
-          description: 'Whether the candidate asked to be called back later.',
-        },
-        {
-          name: 'callback_time_minutes',
-          type: 'number' as any,
-          description: 'If callback was requested, how many minutes later the candidate wants to be called. 0 if not requested.',
-        },
-      ],
+      post_call_analysis_data: POST_CALL_ANALYSIS_DATA as any,
       webhook_url: params.webhookUrl,
       voicemail_option: 'machine_detection_with_beep' as any,
     });
@@ -84,9 +68,12 @@ export async function updateRetellAgent(agentId: string, params: Partial<CreateA
   }
 }
 
-export async function deleteRetellAgent(agentId: string): Promise<void> {
+export async function deleteRetellAgent(agentId: string, llmId?: string | null): Promise<void> {
   try {
     await retellClient.agent.delete(agentId);
+    if (llmId) {
+      try { await retellClient.llm.delete(llmId); } catch { /* best-effort */ }
+    }
     logger.info(`Deleted Retell agent: ${agentId}`);
   } catch (err) {
     logger.error(`Failed to delete Retell agent ${agentId}:`, err);
@@ -169,5 +156,83 @@ export async function listPhoneNumbers() {
   } catch (err) {
     logger.error('Failed to list phone numbers:', err);
     throw err;
+  }
+}
+
+// ─── Retell Sync ────────────────────────────────────────────
+
+export interface SyncResult {
+  retell_llm_id: string | null;
+  retell_agent_id: string | null;
+  sync_status: SyncStatus;
+  sync_error: string | null;
+  last_synced_at: string | null;
+}
+
+type SyncableAgent = Pick<AIAgent,
+  'name' | 'system_prompt' | 'builder_config' | 'retell_agent_id' | 'retell_llm_id' |
+  'voice_id' | 'language' | 'max_call_duration_sec'>;
+
+/**
+ * Push an agent's prompt + config to Retell. Manages BOTH Retell objects:
+ * the LLM (holds general_prompt) and the agent (voice/language/duration).
+ * Returns the ids + sync status to persist. Never throws — failures are
+ * captured in sync_status='error' so the row still saves and can be retried.
+ */
+export async function syncAgentToRetell(agent: SyncableAgent, webhookUrl: string): Promise<SyncResult> {
+  const generalPrompt = agent.builder_config
+    ? compileSystemPrompt(agent.builder_config)
+    : agent.system_prompt;
+
+  let llmId = agent.retell_llm_id;
+  let agentId = agent.retell_agent_id;
+
+  try {
+    if (!llmId) {
+      const created = await retellClient.llm.create({ general_prompt: generalPrompt } as any);
+      llmId = created.llm_id;
+    } else {
+      await retellClient.llm.update(llmId, { general_prompt: generalPrompt } as any);
+    }
+
+    if (!agentId) {
+      const created = await retellClient.agent.create({
+        agent_name: agent.name,
+        response_engine: { type: 'retell-llm', llm_id: llmId },
+        voice_id: agent.voice_id,
+        language: (agent.language || 'en-US') as any,
+        max_call_duration_ms: (agent.max_call_duration_sec || 1200) * 1000,
+        post_call_analysis_data: POST_CALL_ANALYSIS_DATA as any,
+        webhook_url: webhookUrl,
+        voicemail_option: 'machine_detection_with_beep' as any,
+      } as any);
+      agentId = created.agent_id;
+    } else {
+      await retellClient.agent.update(agentId, {
+        agent_name: agent.name,
+        voice_id: agent.voice_id,
+        language: (agent.language || 'en-US') as any,
+        max_call_duration_ms: (agent.max_call_duration_sec || 1200) * 1000,
+      } as any);
+    }
+
+    logger.info(`Synced agent to Retell (llm=${llmId}, agent=${agentId})`);
+    return {
+      retell_llm_id: llmId,
+      retell_agent_id: agentId,
+      sync_status: 'synced',
+      sync_error: null,
+      last_synced_at: new Date().toISOString(),
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('Failed to sync agent to Retell:', err);
+    return {
+      retell_llm_id: llmId,
+      retell_agent_id: agentId,
+      sync_status: 'error',
+      sync_error: message,
+      last_synced_at: null,
+    };
   }
 }
