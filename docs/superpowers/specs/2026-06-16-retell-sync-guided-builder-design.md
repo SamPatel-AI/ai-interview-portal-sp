@@ -15,7 +15,8 @@ Two gaps, bundled into one roadmap item:
 ## Scope & decisions
 
 - **Build sync engine first, then the guided builder** (the builder is pointless until its output reaches Retell).
-- **Portal is the source of truth.** Recruiters edit only in the portal; we reliably push to Retell. A one-time **import** pulls in agents that already exist in Retell. No ongoing Retell→portal reconciliation, no conflict resolution.
+- **Two-way: push + on-demand pull.** Portal edits push to Retell. A per-agent **"Pull from Retell"** action refreshes the portal copy from Retell's current state (for when someone edits the agent directly in the Retell dashboard). A one-time **import** seeds agents that already exist in Retell. *(Update 2026-06-16: bidirectional pull was added per product direction — it was originally deferred. There is no automatic/scheduled reconciliation; pull is explicit.)*
+- **Conflict model = "direction decides."** Pushing overwrites Retell; pulling overwrites the portal. The recruiter chooses the action, so they choose the winner — no timestamp comparison or merge UI. **Consequence:** a prompt edited in Retell can't be decomposed back into structured `builder_config`, so a pull sets `builder_config = null` and stores the raw `general_prompt` as `system_prompt` — i.e. **pulling converts a guided agent into a raw-prompt (legacy) agent.**
 - **Guided builder = structured fields + read-only compiled-prompt preview.** Recruiters never hand-edit the prompt; the backend compiles it. Legacy/imported agents fall back to a raw-prompt editor.
 - **Test call included** — recruiters can send a live Retell test call to their own number before using an agent on real candidates.
 - **Sync executes synchronously on save** (Approach A) — agent edits are rare, so synchronous gives immediate confirmation and pairs with the test-call flow. A `sync_status` column makes failures visible and retryable. No BullMQ job, no scheduled reconcile.
@@ -94,6 +95,7 @@ Route wiring:
 - **POST /api/agents** — validate (guided body: `builder_config`; legacy body: `system_prompt`), compile if guided, insert row, then `syncAgentToRetell`. Return the row incl. `sync_status`/`sync_error`.
 - **PATCH /api/agents/:id** — same: recompile if guided, update row, then `syncAgentToRetell`.
 - **POST /api/agents/:id/sync** — manual "Retry sync" for `error` agents.
+- **POST /api/agents/:id/pull** — Retell→portal pull (see Section 5b).
 - **DELETE /api/agents/:id** — soft-delete (`is_active=false`) + best-effort `agent.delete` **and** `llm.delete`.
 
 This fixes the broken prompt sync for **all** agents, not just new guided ones.
@@ -114,6 +116,14 @@ This fixes the broken prompt sync for **all** agents, not just new guided ones.
   - `llm.retrieve(llm_id)` for `general_prompt`.
   - Insert `ai_agents` row: `builder_config=null` (legacy/raw), `system_prompt=general_prompt`, `retell_agent_id` + `retell_llm_id` set, `voice_id`/`language`/`max_call_duration_sec` from the Retell agent, `sync_status='imported'`, `org_id`/`created_by` from the calling admin.
 - Returns `{ imported, skipped }`. Idempotent — re-running skips already-linked agents.
+
+## Section 5b — On-demand pull (Retell→portal)
+
+**POST /api/agents/:id/pull** (admin/recruiter):
+- Org-scoped fetch; `409` if the agent has no `retell_agent_id` (nothing to pull).
+- `fetchRetellAgentForPull(retell_agent_id)` = `agent.retrieve` + `llm.retrieve` → `{ name, voice_id, language, max_call_duration_sec, system_prompt, retell_llm_id }`. (Shares the `mapRetellAgentToImported` helper with import.)
+- **Overwrites** the portal row with the pulled values, sets `builder_config = null` (guided→raw, since a Retell-edited prompt can't be decomposed), `sync_status='synced'`, `sync_error=null`, `last_synced_at=now`.
+- Returns the updated row. This is the "direction decides" conflict model — pull always wins for the portal copy.
 
 ## Section 6 — Frontend guided builder (Lovable prompt)
 
@@ -145,7 +155,7 @@ The eval-criteria editor (already present) stays as-is, available in an advanced
 
 ## Out of scope (deferred)
 
-- Ongoing Retell→portal reconciliation / drift detection.
-- Bidirectional conflict resolution and prompt versioning.
+- **Automatic/scheduled** Retell→portal reconciliation. (On-demand pull IS in scope — see Section 5b. There is no background job watching Retell; pull is explicit per agent.)
+- Timestamp/merge-based conflict resolution and prompt versioning. (We use the simpler "direction decides" model.)
 - Agent prompt A/B testing or analytics.
 - Multi-language prompt compilation beyond passing `language` to Retell.

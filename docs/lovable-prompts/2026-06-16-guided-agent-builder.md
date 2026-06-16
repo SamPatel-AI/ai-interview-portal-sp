@@ -12,6 +12,7 @@ Paste the prompt below into Lovable. It rebuilds the agent creation/edit experie
 - `POST /api/agents` — create. Send EITHER `builder_config` (guided) OR `system_prompt` (legacy), plus base fields.
 - `PATCH /api/agents/:id` — update. **Send the FULL agent definition** (the backend recompiles + re-syncs and writes `builder_config` wholesale; a partial body would wipe it).
 - `POST /api/agents/:id/sync` — manual retry; returns 502 if Retell sync still fails.
+- `POST /api/agents/:id/pull` — pull the agent's current state FROM Retell, overwriting the portal copy. Returns the updated agent (with `builder_config: null` — pulling converts a guided agent to raw-prompt mode). 409 if the agent isn't linked to Retell yet.
 - `POST /api/agents/:id/test-call` — body `{ phone_number }`. 409 if the agent isn't synced yet.
 - `POST /api/agents/import` — admin only; returns `{ imported, skipped }`.
 - `GET /api/agents/voices`, `GET /api/companies` — existing.
@@ -77,6 +78,7 @@ Rebuild the AI Agent creation/edit experience as a **guided multi-step wizard** 
 - A **read-only** collapsed preview of the generated prompt. After the agent is saved, this is the `system_prompt` field returned by `GET /api/agents/:id`. (Before first save, you may show "Save to generate preview.") Render it monospace, clearly labeled "Generated prompt (read-only)".
 - A **sync status badge**: map `sync_status` → `synced` (green "Live on Retell"), `pending` (gray "Syncing…"), `error` (red "Sync failed"), `imported` (blue "Imported").
 - If `sync_status === 'error'`: show the `sync_error` text and a **"Retry sync"** button that POSTs `/api/agents/:id/sync` and refreshes.
+- **"Pull from Retell"** button (on saved agents only): POSTs `/api/agents/:id/pull`. Because someone may have edited the agent directly in the Retell dashboard, this refreshes the portal copy from Retell. **Show a confirm dialog first:** "Pulling will overwrite this agent in the portal with its current settings in Retell. If this is a guided agent, it will switch to raw-prompt mode (the structured fields can't be recovered from a Retell-edited prompt). Continue?" On success, refetch and (since `builder_config` is now null) the agent opens in the raw-prompt editor. Toast "Pulled latest from Retell."
 - **"Send me a test call"**: a phone-number input + button that POSTs `/api/agents/:id/test-call` with `{ phone_number }`. On 409, show "Save the agent first, then test." On success, toast "Calling <number> now — pick up to hear your agent."
 - Save button.
 
