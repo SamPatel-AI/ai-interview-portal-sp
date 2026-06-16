@@ -64,13 +64,42 @@ export interface ClientCompany {
   created_at: string;
 }
 
+export type SyncStatus = 'pending' | 'synced' | 'error' | 'imported';
+
+export interface PhaseConfig {
+  enabled: boolean;
+  guidance: string;
+}
+
+export interface BuilderConfig {
+  interviewer_persona: string;
+  company_blurb: string;
+  tone: InterviewStyle;
+  phases: {
+    rapport: PhaseConfig;
+    screening: PhaseConfig;
+    deep_dive: PhaseConfig;
+    candidate_qa: PhaseConfig;
+    closing: PhaseConfig;
+  };
+  dos: string[];
+  donts: string[];
+  greeting: string;
+  closing: string;
+}
+
 export interface AIAgent {
   id: string;
   org_id: string;
   client_company_id: string | null;
   name: string;
   retell_agent_id: string | null;
+  retell_llm_id: string | null;
   system_prompt: string;
+  builder_config: BuilderConfig | null;
+  sync_status: SyncStatus;
+  last_synced_at: string | null;
+  sync_error: string | null;
   voice_id: string;
   language: string;
   interview_style: InterviewStyle;
