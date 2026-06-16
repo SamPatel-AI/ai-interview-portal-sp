@@ -290,6 +290,12 @@ router.post(
           throw new AppError(400, 'An interview deadline must be set for this job before sending invites.');
         }
         deadlineDate = new Date(deadline);
+        if (Number.isNaN(deadlineDate.getTime())) {
+          throw new AppError(400, 'Invalid interview deadline date.');
+        }
+        if (deadlineDate.getTime() <= Date.now()) {
+          throw new AppError(400, 'Interview deadline must be a future date.');
+        }
         await supabaseAdmin
           .from('jobs')
           .update({ interview_deadline: deadlineDate.toISOString() })
@@ -338,9 +344,9 @@ router.post(
       const { data: app, error } = await supabaseAdmin
         .from('applications')
         .select(`
-          id, interview_deadline,
+          id, job_id, interview_deadline,
           candidates (id, first_name, last_name, email),
-          jobs (title)
+          jobs (id, title)
         `)
         .eq('id', req.params.id)
         .eq('org_id', req.user!.org_id)
@@ -352,7 +358,34 @@ router.post(
       const job = (app.jobs as any);
       if (!candidate?.email) throw new AppError(400, 'Candidate has no email address');
 
-      const deadline = (app as any).interview_deadline ? new Date((app as any).interview_deadline) : null;
+      // A (re)send needs a FUTURE booking deadline (else the Cal link is capped
+      // to a past date). Accept an optional new deadline to extend a missed call;
+      // otherwise reuse the existing one — but reject if it's missing or expired.
+      const { deadline: newDeadline } = req.body as { deadline?: string };
+      let deadline = (app as any).interview_deadline ? new Date((app as any).interview_deadline) : null;
+      if (newDeadline) {
+        const d = new Date(newDeadline);
+        if (Number.isNaN(d.getTime()) || d.getTime() <= Date.now()) {
+          throw new AppError(400, 'Interview deadline must be a future date.');
+        }
+        deadline = d;
+        await supabaseAdmin
+          .from('applications')
+          .update({ interview_deadline: d.toISOString() })
+          .eq('id', app.id);
+        if (job?.id) {
+          await supabaseAdmin
+            .from('jobs')
+            .update({ interview_deadline: d.toISOString() })
+            .eq('id', job.id);
+        }
+      }
+      if (!deadline || deadline.getTime() <= Date.now()) {
+        throw new AppError(
+          400,
+          'A future interview deadline is required to resend this invitation. Provide a new deadline to extend it.',
+        );
+      }
 
       const { sendInvitationEmail } = await import('../services/email.service');
       await sendInvitationEmail(
