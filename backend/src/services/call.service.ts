@@ -6,6 +6,23 @@ import { logger } from '../utils/logger';
 import { env } from '../config/env';
 import { Application, Candidate, Job, AIAgent, Call } from '../types';
 
+/**
+ * Resolve the AI agent for a call: use the job's assigned agent if present,
+ * otherwise fall back to the org's default active agent.
+ */
+async function resolveAgent(jobAgent: AIAgent | null | undefined, orgId: string): Promise<AIAgent> {
+  if (jobAgent) return jobAgent;
+  const { data } = await supabaseAdmin
+    .from('ai_agents')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('is_default', true)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (!data) throw new Error('No agent assigned to this job and no default agent configured.');
+  return data as AIAgent;
+}
+
 interface InitiateCallParams {
   applicationId: string;
   orgId: string;
@@ -37,9 +54,8 @@ export async function initiateOutboundCall(params: InitiateCallParams): Promise<
 
   const candidate = app.candidates as Candidate;
   const job = app.jobs as Job & { ai_agents: AIAgent; client_companies: { name: string } };
-  const agent = job.ai_agents;
+  const agent = await resolveAgent(job.ai_agents, app.org_id);
 
-  if (!agent) throw new Error('No AI agent assigned to this job. Assign an agent first.');
   if (!candidate.phone) throw new Error('Candidate has no phone number');
   if (!agent.retell_agent_id) throw new Error('AI agent not synced with Retell');
 
@@ -166,10 +182,10 @@ export async function resumeInterruptedCall(
   const app = prevCall.applications;
   const candidate = app.candidates as Candidate;
   const job = app.jobs as Job & { ai_agents: AIAgent; client_companies: { name: string } };
-  const agent = job.ai_agents;
+  const agent = await resolveAgent(job.ai_agents, orgId);
 
   if (!candidate.phone) throw new Error('Candidate has no phone number');
-  if (!agent?.retell_agent_id) throw new Error('AI agent not available');
+  if (!agent.retell_agent_id) throw new Error('AI agent not available');
 
   const formattedPhone = formatPhoneE164(candidate.phone);
 

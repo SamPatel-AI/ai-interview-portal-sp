@@ -152,7 +152,7 @@ export async function syncAgentToRetell(agent: SyncableAgent, webhookUrl: string
         max_call_duration_ms: (agent.max_call_duration_sec || 1200) * 1000,
         post_call_analysis_data: POST_CALL_ANALYSIS_DATA as any,
         webhook_url: webhookUrl,
-        voicemail_option: 'machine_detection_with_beep' as any,
+        voicemail_option: { action: { type: 'hangup' } } as any,
       } as any);
       agentId = created.agent_id;
     } else {

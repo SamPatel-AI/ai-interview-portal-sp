@@ -77,6 +77,12 @@ describe('syncAgentToRetell', () => {
     expect(res.sync_status).toBe('error');
   });
 
+  it('sends voicemail_option as an object (Retell rejects the string form)', async () => {
+    await syncAgentToRetell(baseAgent, 'http://hook');
+    const payload = agent.create.mock.calls[0][0];
+    expect(payload.voicemail_option).toEqual({ action: { type: 'hangup' } });
+  });
+
   it('does not throw when builder_config is malformed — returns error status', async () => {
     const bad = { ...baseAgent, builder_config: { tone: 'conversational' } as any }; // missing phases
     const res = await syncAgentToRetell(bad, 'http://hook');
