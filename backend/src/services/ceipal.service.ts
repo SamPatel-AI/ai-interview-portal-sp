@@ -22,19 +22,6 @@ interface CeipalJob {
   pay_rates?: Array<{ pay_rate_currency?: string; pay_rate?: string; min_pay_rate?: string; max_pay_rate?: string }>;
 }
 
-// Only surface jobs CEIPAL has touched within this window — CEIPAL leaves old
-// reqs flagged "Active", so status alone can't tell live work from history.
-const ACTIVE_WINDOW_DAYS = Number(process.env.CEIPAL_ACTIVE_DAYS) || 30;
-
-/** True if the job was created/modified within ACTIVE_WINDOW_DAYS. */
-function isRecentlyActive(cJob: CeipalJob, now: number): boolean {
-  const raw = cJob.modified || cJob.created;
-  if (!raw) return false;
-  const t = new Date(raw).getTime();
-  if (Number.isNaN(t)) return false;
-  return now - t <= ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
-}
-
 function mapEmploymentType(v?: string): 'full_time' | 'contract' | 'c2c' | 'w2' {
   const s = (v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   if (s.includes('c2c')) return 'c2c';
@@ -387,16 +374,18 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
   let updated = 0;
   let linked = 0;
   let skipped = 0;
-  const now = Date.now();
 
   for (const cJob of ceipalJobs) {
     const jobCode = cJob.job_code || '';
-    const recent = isRecentlyActive(cJob, now);
-    // A job is "visible" only if it's open AND recently touched. Stale postings
-    // (CEIPAL leaves them Active forever) are stored as 'closed' so the
-    // open-only views hide them — keeps the portal to live reqs.
-    const status = recent ? mapJobStatus(cJob.job_status) : 'closed';
+    const status = mapJobStatus(cJob.job_status);
     const isOpen = status === 'open';
+    // Store CEIPAL's modified date so the portal can filter the recency window
+    // (30/60/90 days) at query time. CEIPAL leaves old reqs flagged Active, so
+    // this date — not status — is what tells live work from history.
+    const modifiedRaw = cJob.modified || cJob.created;
+    const modifiedAt = modifiedRaw && !Number.isNaN(new Date(modifiedRaw).getTime())
+      ? new Date(modifiedRaw).toISOString()
+      : null;
     const description = cleanHtmlDescription(cJob.public_job_desc || cJob.requisition_description || '');
     const skills = cJob.skills ? cJob.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
 
@@ -418,6 +407,7 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
       // Keep the Business Unit id for reference; client linkage is client_company_id.
       ceipal_company_id: cJob.company != null ? String(cJob.company) : null,
       client_company_id: resolvedClientId,
+      ceipal_modified_at: modifiedAt,
       synced_at: new Date().toISOString(),
     };
 

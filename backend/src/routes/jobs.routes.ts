@@ -50,7 +50,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const offset = (page - 1) * limit;
-    const { status, company_id, search, recruiter_id } = req.query;
+    const { status, company_id, search, recruiter_id, days } = req.query;
 
     let query = supabaseAdmin
       .from('jobs')
@@ -68,6 +68,14 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     if (status && status !== 'all') query = query.eq('status', status as string);
     else if (!status) query = query.eq('status', 'open');
     if (company_id) query = query.eq('client_company_id', company_id);
+
+    // Recency window (30/60/90). CEIPAL keeps old reqs Active, so filter by the
+    // job's CEIPAL modified date. Default 30; pass ?days=all to disable.
+    const windowDays = days === 'all' ? 0 : parseInt(days as string) || 30;
+    if (windowDays > 0) {
+      const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+      query = query.gte('ceipal_modified_at', cutoff);
+    }
     if (recruiter_id) query = query.eq('assigned_recruiter_id', recruiter_id);
     if (search) query = query.or(`title.ilike.%${search}%,ceipal_job_id.ilike.%${search}%`);
 

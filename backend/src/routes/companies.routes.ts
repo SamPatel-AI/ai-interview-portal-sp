@@ -25,16 +25,22 @@ const updateCompanySchema = createCompanySchema.partial();
 
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { search } = req.query;
+    const { search, days, scope } = req.query;
 
-    // Count only OPEN jobs per company (embedded filter affects the embed only,
-    // so companies with no open jobs are still returned with jobs_count 0).
+    // Count only OPEN jobs within the recency window (embedded filters affect the
+    // embed only, so companies with no matching jobs are still returned, count 0).
     let query = supabaseAdmin
       .from('client_companies')
       .select('*, jobs (id), ai_agents (id)', { count: 'exact' })
       .eq('org_id', req.user!.org_id)
       .eq('jobs.status', 'open')
       .order('name');
+
+    const windowDays = days === 'all' ? 0 : parseInt(days as string) || 30;
+    if (windowDays > 0) {
+      const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+      query = query.gte('jobs.ceipal_modified_at', cutoff);
+    }
 
     if (search) {
       query = query.ilike('name', `%${search}%`);
@@ -44,9 +50,10 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     if (error) throw new AppError(500, 'Failed to fetch companies');
 
-    // Add jobs_count (open only) and agents_count, then sort highest → lowest
-    // so the busiest clients lead. Zero-job companies sort to the bottom.
-    const enriched = (data ?? [])
+    // jobs_count = open jobs in the window; sort highest → lowest. scope=active
+    // returns only companies that have jobs in the window; scope=all returns every
+    // company (default = active, so the portal leads with clients that have work).
+    let enriched = (data ?? [])
       .map(({ jobs, ai_agents, ...company }) => ({
         ...company,
         jobs_count: Array.isArray(jobs) ? jobs.length : 0,
@@ -54,7 +61,9 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       }))
       .sort((a, b) => b.jobs_count - a.jobs_count || a.name.localeCompare(b.name));
 
-    res.json({ success: true, data: enriched, total: count });
+    if (scope !== 'all') enriched = enriched.filter((c) => c.jobs_count > 0);
+
+    res.json({ success: true, data: enriched, total: enriched.length });
   } catch (err) {
     next(err);
   }
