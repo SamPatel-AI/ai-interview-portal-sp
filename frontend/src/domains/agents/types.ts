@@ -1,3 +1,27 @@
+export type SyncStatus = 'synced' | 'pending' | 'error' | 'imported';
+
+export interface PhaseConfig {
+  enabled: boolean;
+  guidance: string;
+}
+
+export interface BuilderConfig {
+  interviewer_persona: string;
+  company_blurb: string;
+  tone: 'formal' | 'conversational' | 'technical';
+  phases: {
+    rapport: PhaseConfig;
+    screening: PhaseConfig;
+    deep_dive: PhaseConfig;
+    candidate_qa: PhaseConfig;
+    closing: PhaseConfig;
+  };
+  dos: string[];
+  donts: string[];
+  greeting: string;
+  closing: string;
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -11,6 +35,10 @@ export interface Agent {
   greeting_template: string | null;
   closing_template: string | null;
   system_prompt: string;
+  builder_config: BuilderConfig | null;
+  sync_status: SyncStatus;
+  sync_error?: string | null;
+  is_default?: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -29,6 +57,7 @@ export interface CreateAgentInput {
   greeting_template?: string;
   closing_template?: string;
   system_prompt?: string;
+  builder_config?: BuilderConfig;
   is_active?: boolean;
 }
 

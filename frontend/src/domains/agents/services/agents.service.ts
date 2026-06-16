@@ -30,3 +30,28 @@ export async function updateAgent(id: string, input: Partial<CreateAgentInput>) 
 export async function deleteAgent(id: string) {
   return apiRequest<ApiResponse<void>>(`/api/agents/${id}`, { method: 'DELETE' });
 }
+
+export async function syncAgent(id: string) {
+  return apiRequest<ApiResponse<Agent>>(`/api/agents/${id}/sync`, { method: 'POST' });
+}
+
+export async function pullAgent(id: string) {
+  return apiRequest<ApiResponse<Agent>>(`/api/agents/${id}/pull`, { method: 'POST' });
+}
+
+export async function testCallAgent(id: string, phone_number: string) {
+  return apiRequest<ApiResponse<unknown>>(`/api/agents/${id}/test-call`, {
+    method: 'POST',
+    body: JSON.stringify({ phone_number }),
+  });
+}
+
+export async function setDefaultAgent(id: string) {
+  return apiRequest<ApiResponse<Agent>>(`/api/agents/${id}/default`, { method: 'POST' });
+}
+
+export async function importAgents() {
+  return apiRequest<ApiResponse<{ imported: number; skipped: number }>>('/api/agents/import', {
+    method: 'POST',
+  });
+}
