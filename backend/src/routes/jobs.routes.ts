@@ -4,7 +4,7 @@ import { supabaseAdmin } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import '../types';
-import { syncCeipalJobs, discoverCeipalClientField } from '../services/ceipal.service';
+import { ceipalSyncQueue } from '../jobs/ceipalSync.job';
 
 const router = Router();
 
@@ -50,7 +50,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const offset = (page - 1) * limit;
-    const { status, company_id, search, recruiter_id } = req.query;
+    const { status, company_id, search, recruiter_id, days } = req.query;
 
     let query = supabaseAdmin
       .from('jobs')
@@ -63,8 +63,19 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       `, { count: 'exact' })
       .eq('org_id', req.user!.org_id);
 
-    if (status) query = query.eq('status', status);
+    // Default to OPEN jobs so closed/filled CEIPAL history stays hidden.
+    // Pass ?status=all to see every status, or ?status=closed for a specific one.
+    if (status && status !== 'all') query = query.eq('status', status as string);
+    else if (!status) query = query.eq('status', 'open');
     if (company_id) query = query.eq('client_company_id', company_id);
+
+    // Recency window (30/60/90). CEIPAL keeps old reqs Active, so filter by the
+    // job's CEIPAL modified date. Default 30; pass ?days=all to disable.
+    const windowDays = days === 'all' ? 0 : parseInt(days as string) || 30;
+    if (windowDays > 0) {
+      const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+      query = query.gte('ceipal_modified_at', cutoff);
+    }
     if (recruiter_id) query = query.eq('assigned_recruiter_id', recruiter_id);
     if (search) query = query.or(`title.ilike.%${search}%,ceipal_job_id.ilike.%${search}%`);
 
@@ -92,22 +103,6 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     next(err);
   }
 });
-
-// ─── GET /api/jobs/_ceipal-debug ───────────────────────────
-// TEMPORARY: discover the CEIPAL detail param + client field name. Read-only,
-// admin-only. Remove once client auto-linking is wired. MUST be declared before
-// `GET /:id` so the literal path isn't captured as an id.
-router.get(
-  '/_ceipal-debug',
-  requireRole('admin'),
-  async (_req: Request, res: Response, next: NextFunction) => {
-    try {
-      res.json({ success: true, data: await discoverCeipalClientField() });
-    } catch (err) {
-      next(err instanceof Error ? new AppError(500, `CEIPAL debug failed: ${err.message}`) : err);
-    }
-  }
-);
 
 // ─── GET /api/jobs/:id ─────────────────────────────────────
 
@@ -208,20 +203,26 @@ router.post(
     try {
       const { client_company_id } = req.body;
 
-      const result = await syncCeipalJobs(req.user!.org_id, client_company_id);
+      // The full client+job sync is call-heavy (one CEIPAL request per client +
+      // throttle/backoff) and exceeds the HTTP request window — enqueue it onto
+      // the BullMQ worker so it always runs to completion in the background.
+      const job = await ceipalSyncQueue.add('manual-sync', {
+        orgId: req.user!.org_id,
+        clientCompanyId: client_company_id,
+      });
 
       await supabaseAdmin.from('activity_log').insert({
         org_id: req.user!.org_id,
         user_id: req.user!.id,
         entity_type: 'job',
         entity_id: req.user!.org_id,
-        action: 'ceipal_sync',
-        details: result,
+        action: 'ceipal_sync_queued',
+        details: { jobId: job.id },
       });
 
-      res.json({ success: true, data: result });
+      res.status(202).json({ success: true, queued: true, jobId: job.id });
     } catch (err) {
-      next(err instanceof Error ? new AppError(500, `CEIPAL sync failed: ${err.message}`) : err);
+      next(err instanceof Error ? new AppError(500, `CEIPAL sync enqueue failed: ${err.message}`) : err);
     }
   }
 );

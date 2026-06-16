@@ -17,6 +17,8 @@ interface CeipalJob {
   company?: number | string;
   employment_type?: string;
   job_status?: string;
+  modified?: string;
+  created?: string;
   pay_rates?: Array<{ pay_rate_currency?: string; pay_rate?: string; min_pay_rate?: string; max_pay_rate?: string }>;
 }
 
@@ -46,6 +48,26 @@ function formatPayRate(rates?: CeipalJob['pay_rates']): string | null {
   if (single) return `${cur} ${single}`.trim();
   if (max) return `${cur} ${max}`.trim();
   return null;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * GET a CEIPAL endpoint with throttling + exponential backoff on 429.
+ * CEIPAL rate-limits aggressively; a small inter-call delay plus backoff keeps
+ * the call-heavy client sync from tripping the limiter.
+ */
+async function ceipalGet(url: string, token: string, maxRetries = 5): Promise<Response> {
+  let response: Response | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    response = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    });
+    if (response.status !== 429) return response;
+    // 429 → wait (1s, 2s, 4s, 8s, 16s, capped) then retry.
+    await sleep(Math.min(1000 * 2 ** attempt, 20000));
+  }
+  return response as Response; // last response (still 429) — caller decides
 }
 
 /**
@@ -88,12 +110,7 @@ async function fetchCeipalJobs(token: string, searchKey?: string): Promise<Ceipa
     if (searchKey) url.searchParams.set('searchkey', searchKey);
     url.searchParams.set('page', String(page));
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
+    const response = await ceipalGet(url.toString(), token);
 
     if (!response.ok) throw new Error(`CEIPAL jobs fetch failed: ${response.status}`);
 
@@ -104,6 +121,201 @@ async function fetchCeipalJobs(token: string, searchKey?: string): Promise<Ceipa
   } while (page <= numPages && page <= 100); // hard cap as a runaway guard
 
   return all;
+}
+
+interface CeipalClient {
+  id: string; // CEIPAL's encoded client id, used as ?client= filter + our ceipal_company_id
+  name: string;
+}
+
+/**
+ * Normalize a company name for duplicate detection: lowercase, strip
+ * punctuation + common legal/structural suffix words, fold "motors"→"motor"
+ * (Ford Motors ↔ Ford Motor Company), collapse whitespace. Conservative on
+ * purpose — we only want to merge clear variants of the SAME company, never
+ * distinct companies.
+ */
+function normalizeCompanyName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(inc|llc|ltd|corp|corporation|company|co|group|technologies|technology|consulting|services)\b/g, ' ')
+    .replace(/\bmotors\b/g, 'motor')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Fetch all clients from CEIPAL (getClientsList, paginated).
+ */
+async function fetchCeipalClients(token: string): Promise<CeipalClient[]> {
+  const all: CeipalClient[] = [];
+  let page = 1;
+  let numPages = 1;
+  do {
+    const url = new URL('https://api.ceipal.com/v1/getClientsList/');
+    url.searchParams.set('page', String(page));
+    const response = await ceipalGet(url.toString(), token);
+    if (!response.ok) throw new Error(`CEIPAL clients fetch failed: ${response.status}`);
+    const data = (await response.json()) as {
+      results?: Array<{ id?: string; name?: string }>;
+      num_pages?: number;
+    };
+    for (const c of data.results || []) {
+      if (c.id && c.name) all.push({ id: String(c.id), name: String(c.name).trim() });
+    }
+    numPages = data.num_pages || 1;
+    page += 1;
+  } while (page <= numPages && page <= 50);
+  return all;
+}
+
+/**
+ * Total number of job postings (unfiltered). Used by the client-filter guard to
+ * detect if the `client=` filter is being ignored (returns the full set).
+ */
+async function fetchTotalJobCount(token: string): Promise<number> {
+  const r = await ceipalGet('https://api.ceipal.com/v1/getJobPostingsList?page=1', token);
+  if (!r.ok) return 0;
+  const data = (await r.json()) as { results?: unknown[]; count?: number };
+  return data.count ?? (data.results?.length || 0);
+}
+
+/**
+ * Fetch the job codes belonging to one client via the `client` filter on
+ * getJobPostingsList. This is the only CEIPAL API surface that exposes the
+ * job->client link (the job-posting detail itself carries no client field).
+ * `client=` is UNDOCUMENTED but verified to filter; the caller guards against
+ * it being silently ignored (see syncCeipalClients).
+ */
+async function fetchClientJobCodes(
+  token: string,
+  clientId: string,
+): Promise<{ codes: string[]; count: number }> {
+  const codes: string[] = [];
+  let page = 1;
+  let numPages = 1;
+  let count = 0;
+  do {
+    // `client` must be the raw encoded id; verified that this param actually
+    // filters the result set (other param names are silently ignored).
+    const url = `https://api.ceipal.com/v1/getJobPostingsList?client=${clientId}&page=${page}`;
+    const response = await ceipalGet(url, token);
+    if (!response.ok) break; // a single client failing shouldn't abort the whole sync
+    const data = (await response.json()) as {
+      results?: CeipalJob[];
+      num_pages?: number;
+      count?: number;
+    };
+    if (page === 1) count = data.count ?? (data.results?.length || 0);
+    for (const j of data.results || []) if (j.job_code) codes.push(j.job_code);
+    numPages = data.num_pages || 1;
+    page += 1;
+  } while (page <= numPages && page <= 50);
+  return { codes, count };
+}
+
+/**
+ * Sync CEIPAL clients into client_companies and build a job_code -> our
+ * client_company.id map (so each job can be linked to its real end client).
+ * Matches an existing client by ceipal_company_id, else by name (to absorb
+ * manually-created clients), else inserts a new one.
+ */
+async function syncCeipalClients(
+  orgId: string,
+  token: string,
+): Promise<{
+  clientCount: number;
+  jobCodeToClientId: Map<string, string>;
+  filterIgnoredClients: number;
+  merged: number;
+}> {
+  const clients = await fetchCeipalClients(token);
+  const jobCodeToClientId = new Map<string, string>();
+  let clientCount = 0;
+  let merged = 0;
+
+  // Guard baseline: how many jobs exist unfiltered. If a `client=`-filtered
+  // request returns this same total, the filter was ignored and we must NOT map
+  // (it would mislink every job to one client).
+  const totalJobs = await fetchTotalJobCount(token);
+  let filterIgnoredClients = 0;
+
+  // Load all existing companies once so we can match by ceipal id OR normalized
+  // name (catches pre-existing/manually-created clients) and merge duplicates.
+  const { data: existingRows } = await supabaseAdmin
+    .from('client_companies')
+    .select('id, name, ceipal_company_id')
+    .eq('org_id', orgId);
+  const existing: Array<{ id: string; name: string; ceipal_company_id: string | null }> =
+    existingRows ?? [];
+
+  for (const c of clients) {
+    if (!c.name) continue;
+    const cNorm = normalizeCompanyName(c.name);
+
+    // Matches: same CEIPAL id, or same normalized name.
+    const matches = existing.filter(
+      (e) => e.ceipal_company_id === c.id || normalizeCompanyName(e.name) === cNorm,
+    );
+
+    let canonicalId: string | undefined;
+    if (matches.length === 0) {
+      const { data: created } = await supabaseAdmin
+        .from('client_companies')
+        .insert({ org_id: orgId, name: c.name, ceipal_company_id: c.id })
+        .select('id, name, ceipal_company_id')
+        .single();
+      if (created) {
+        existing.push(created);
+        canonicalId = created.id;
+      }
+    } else {
+      // Prefer the row already tagged with this CEIPAL id, else keep the first
+      // (preserves a user's original company name). Tag it with the CEIPAL id.
+      const canonical = matches.find((m) => m.ceipal_company_id === c.id) ?? matches[0];
+      canonicalId = canonical.id;
+      if (canonical.ceipal_company_id !== c.id) {
+        await supabaseAdmin
+          .from('client_companies')
+          .update({ ceipal_company_id: c.id })
+          .eq('id', canonical.id);
+        canonical.ceipal_company_id = c.id;
+      }
+      // Soft-merge any sibling duplicates into the canonical: reassign their
+      // jobs + agents, then leave the now-empty sibling in place (the portal
+      // hides zero-job companies). No deletes → no unique company is lost.
+      for (const sib of matches) {
+        if (sib.id === canonical.id) continue;
+        await supabaseAdmin
+          .from('jobs')
+          .update({ client_company_id: canonical.id })
+          .eq('org_id', orgId)
+          .eq('client_company_id', sib.id);
+        await supabaseAdmin
+          .from('ai_agents')
+          .update({ client_company_id: canonical.id })
+          .eq('org_id', orgId)
+          .eq('client_company_id', sib.id);
+        merged++;
+      }
+    }
+    if (!canonicalId) continue;
+    clientCount++;
+
+    const { codes, count } = await fetchClientJobCodes(token, c.id);
+    // Filter-ignored guard: a real client returns a subset; if it returns the
+    // entire job set, the `client=` param was dropped — skip to avoid mislinking.
+    if (totalJobs > 0 && count >= totalJobs) {
+      filterIgnoredClients++;
+      continue;
+    }
+    for (const code of codes) jobCodeToClientId.set(code, canonicalId);
+
+    await sleep(250); // be polite to CEIPAL's rate limiter between clients
+  }
+
+  return { clientCount, jobCodeToClientId, filterIgnoredClients, merged };
 }
 
 /**
@@ -134,31 +346,52 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
   synced: number;
   created: number;
   updated: number;
+  clients: number;
+  linked: number;
+  skipped: number;
 }> {
   logger.info(`Starting CEIPAL sync for org ${orgId}`);
 
   const token = await getCeipalToken();
-  const ceipalJobs = await fetchCeipalJobs(token);
 
-  // Map CEIPAL company id -> our client_company id, so jobs auto-link to the
-  // right client when that client has been tagged with its ceipal_company_id.
-  const { data: clients } = await supabaseAdmin
-    .from('client_companies')
-    .select('id, ceipal_company_id')
-    .eq('org_id', orgId)
-    .not('ceipal_company_id', 'is', null);
-  const clientByCeipalId = new Map<string, string>();
-  for (const c of clients ?? []) {
-    if (c.ceipal_company_id) clientByCeipalId.set(String(c.ceipal_company_id), c.id);
+  // Sync clients first and build job_code -> our client_company.id. CEIPAL only
+  // exposes the job->client link via the `client` filter on the job list, so we
+  // resolve it here once for every client and look it up per job below.
+  const { clientCount, jobCodeToClientId, filterIgnoredClients, merged } = await syncCeipalClients(
+    orgId,
+    token,
+  );
+  if (merged > 0) logger.info(`CEIPAL sync merged ${merged} duplicate client row(s)`);
+  if (filterIgnoredClients > 0) {
+    logger.warn(
+      `CEIPAL client= filter appears unreliable: ${filterIgnoredClients} client(s) returned the full job set. Those jobs are left unassigned rather than mislinked.`,
+    );
   }
+
+  const ceipalJobs = await fetchCeipalJobs(token);
 
   let created = 0;
   let updated = 0;
+  let linked = 0;
+  let skipped = 0;
 
   for (const cJob of ceipalJobs) {
     const jobCode = cJob.job_code || '';
+    const status = mapJobStatus(cJob.job_status);
+    const isOpen = status === 'open';
+    // Store CEIPAL's modified date so the portal can filter the recency window
+    // (30/60/90 days) at query time. CEIPAL leaves old reqs flagged Active, so
+    // this date — not status — is what tells live work from history.
+    const modifiedRaw = cJob.modified || cJob.created;
+    const modifiedAt = modifiedRaw && !Number.isNaN(new Date(modifiedRaw).getTime())
+      ? new Date(modifiedRaw).toISOString()
+      : null;
     const description = cleanHtmlDescription(cJob.public_job_desc || cJob.requisition_description || '');
     const skills = cJob.skills ? cJob.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+
+    // Explicit override (clientCompanyId arg) wins; otherwise use the resolved
+    // CEIPAL client. Falls back to null (unassigned) when the job has no client.
+    const resolvedClientId = clientCompanyId || jobCodeToClientId.get(jobCode) || null;
 
     const fields = {
       title: cJob.public_job_title || cJob.position_title,
@@ -169,13 +402,12 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
       country: cJob.country || null,
       tax_terms: cJob.tax_terms || null,
       employment_type: mapEmploymentType(cJob.employment_type),
-      status: mapJobStatus(cJob.job_status),
+      status,
       pay_rate: formatPayRate(cJob.pay_rates),
+      // Keep the Business Unit id for reference; client linkage is client_company_id.
       ceipal_company_id: cJob.company != null ? String(cJob.company) : null,
-      // Auto-link to the client whose ceipal_company_id matches this job's company.
-      ...(cJob.company != null && clientByCeipalId.has(String(cJob.company))
-        ? { client_company_id: clientByCeipalId.get(String(cJob.company)) }
-        : {}),
+      client_company_id: resolvedClientId,
+      ceipal_modified_at: modifiedAt,
       synced_at: new Date().toISOString(),
     };
 
@@ -188,22 +420,31 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
       .single();
 
     if (existing) {
+      // Always keep existing rows current (a job that closed gets status=closed
+      // and is then hidden by the open-only views).
       await supabaseAdmin.from('jobs').update(fields).eq('id', existing.id);
       updated++;
-    } else {
+      if (isOpen && resolvedClientId) linked++;
+    } else if (isOpen) {
+      // Only ingest OPEN postings — skip closed/filled/on-hold history so the
+      // pipeline tracks live reqs, not CEIPAL's full archive.
       await supabaseAdmin.from('jobs').insert({
         org_id: orgId,
-        client_company_id: clientCompanyId || null,
         ceipal_job_id: jobCode,
         ...fields,
       });
       created++;
+      if (resolvedClientId) linked++;
+    } else {
+      skipped++;
     }
   }
 
-  logger.info(`CEIPAL sync complete: ${ceipalJobs.length} found, ${created} created, ${updated} updated`);
+  logger.info(
+    `CEIPAL sync complete: ${clientCount} clients, ${ceipalJobs.length} found, ${created} created, ${updated} updated, ${skipped} non-open skipped, ${linked} open jobs linked to a client`,
+  );
 
-  return { synced: ceipalJobs.length, created, updated };
+  return { synced: ceipalJobs.length, created, updated, clients: clientCount, linked, skipped };
 }
 
 /**
@@ -213,156 +454,4 @@ export async function fetchCeipalJob(jobCode: string): Promise<CeipalJob | null>
   const token = await getCeipalToken();
   const jobs = await fetchCeipalJobs(token, `JPC - ${jobCode}`);
   return jobs.length > 0 ? jobs[0] : null;
-}
-
-/**
- * TEMPORARY discovery helper — runs only from the Railway backend (CEIPAL
- * rate-limits other IPs). It answers two unknowns needed to auto-link jobs to
- * their END client (not the Business Unit `company` id, which is identical for
- * every job):
- *   1. Which field in the list response holds the internal posting id.
- *   2. Which param `getJobPostingDetails` expects, and which field in its
- *      response holds the client / end-customer name.
- * It is READ-ONLY (no DB writes) and will be removed once the field names are
- * confirmed. Hit it once on Railway and paste the JSON back.
- */
-export async function discoverCeipalClientField(): Promise<unknown> {
-  const token = await getCeipalToken();
-
-  // Raw list (untyped) so we can see every key CEIPAL actually returns.
-  const listRes = await fetch('https://api.ceipal.com/v1/getJobPostingsList?page=1', {
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-  });
-  const listJson = (await listRes.json()) as { results?: Record<string, unknown>[] };
-  const first = listJson.results?.[0] ?? {};
-
-  // Candidate id fields on the list item that might key the detail call.
-  const idFieldCandidates = ['id', 'job_id', 'job_posting_id', 'posting_id', 'jpid'];
-  const idSources = idFieldCandidates
-    .filter((f) => first[f] != null)
-    .map((f) => ({ field: f, value: first[f] }));
-
-  // Candidate param names for getJobPostingDetails. Try each id source against
-  // each param name until one returns a non-error object.
-  const paramCandidates = ['job_id', 'posting_id', 'id'];
-  const attempts: Array<Record<string, unknown>> = [];
-  let detailKeys: string[] | null = null;
-  let detailSample: Record<string, unknown> | null = null;
-
-  outer: for (const src of idSources) {
-    for (const param of paramCandidates) {
-      const url = new URL('https://api.ceipal.com/v1/getJobPostingDetails/');
-      url.searchParams.set(param, String(src.value));
-      let status = 0;
-      let keys: string[] = [];
-      let body: unknown = null;
-      try {
-        const r = await fetch(url.toString(), {
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        });
-        status = r.status;
-        body = await r.json();
-        if (body && typeof body === 'object') keys = Object.keys(body as object);
-      } catch (e) {
-        body = { error: e instanceof Error ? e.message : String(e) };
-      }
-      attempts.push({ param, idField: src.field, idValue: src.value, status, keys });
-      // A successful detail object has many keys; an error payload has few.
-      if (status === 200 && keys.length > 3) {
-        detailKeys = keys;
-        detailSample = body as Record<string, unknown>;
-        break outer;
-      }
-    }
-  }
-
-  // Surface the fields most likely to hold the client name for quick eyeballing.
-  const clientHintFields = detailSample
-    ? Object.fromEntries(
-        Object.entries(detailSample).filter(([k]) =>
-          /client|customer|account|company|end_?client/i.test(k),
-        ),
-      )
-    : null;
-
-  // The job-posting API exposes NO client field (only business_unit_id), yet
-  // the CEIPAL UI shows a real "Client" (e.g. "Ford Motors", internal id 2).
-  // It must live in a separate client API. Probe candidate endpoints + a few
-  // job-detail param variants to find (a) a client list (id->name) and (b) any
-  // job->client linkage. Report status + shape for each.
-  const probe = async (url: string): Promise<Record<string, unknown>> => {
-    try {
-      const r = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      });
-      let body: unknown = null;
-      try {
-        body = await r.json();
-      } catch {
-        body = '[non-json response]';
-      }
-      const results = (body as { results?: unknown[] })?.results;
-      const sample = Array.isArray(results) ? results[0] : body;
-      return {
-        url,
-        status: r.status,
-        topKeys: body && typeof body === 'object' ? Object.keys(body as object).slice(0, 30) : null,
-        sampleKeys:
-          sample && typeof sample === 'object' ? Object.keys(sample as object).slice(0, 40) : null,
-        sample: sample && typeof sample === 'object' ? sample : body,
-      };
-    } catch (e) {
-      return { url, error: e instanceof Error ? e.message : String(e) };
-    }
-  };
-
-  const base = 'https://api.ceipal.com/v1/';
-  const clientEndpointProbes = [];
-  for (const ep of [
-    'getClientList',
-    'getClientsList',
-    'getClients',
-    'getClientDetails',
-    'getCompanyList',
-    'getBusinessUnitList',
-  ]) {
-    clientEndpointProbes.push(await probe(`${base}${ep}/?page=1`));
-  }
-
-  // Re-probe job detail with param variants that might unlock a client field.
-  const firstId = idSources[0]?.value;
-  const jobDetailVariants = firstId
-    ? await Promise.all(
-        [`${base}getJobPostingDetails/?job_id=${firstId}&fields=all`].map((u) => probe(u)),
-      )
-    : [];
-
-  // The keys showed NO client field, so dump full VALUES of the first job's
-  // list item + detail so we can locate where the end-client name actually
-  // lives (likely embedded in title / description / department / address text).
-  // Truncate long HTML blobs so the payload stays readable.
-  const truncate = (o: Record<string, unknown> | null) =>
-    o
-      ? Object.fromEntries(
-          Object.entries(o).map(([k, v]) => [
-            k,
-            typeof v === 'string' && v.length > 600 ? v.slice(0, 600) + '…[truncated]' : v,
-          ]),
-        )
-      : null;
-
-  return {
-    listFirstJobKeys: Object.keys(first),
-    listFirstJobClientHints: Object.fromEntries(
-      Object.entries(first).filter(([k]) => /client|customer|account|company/i.test(k)),
-    ),
-    idSourcesFound: idSources,
-    detailAttempts: attempts,
-    detailResponseKeys: detailKeys,
-    detailClientHintFields: clientHintFields,
-    listFirstJobFull: truncate(first),
-    detailFull: truncate(detailSample),
-    clientEndpointProbes,
-    jobDetailVariants,
-  };
 }
