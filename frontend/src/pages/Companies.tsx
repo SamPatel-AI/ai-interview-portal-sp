@@ -55,20 +55,26 @@ export default function Companies() {
                   <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="text-lg font-bold text-primary">{company.name[0]}</span>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">{company.name}</h3>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-semibold text-foreground">{company.name}</h3>
+                      {typeof company.jobs_count === 'number' && (
+                        <Badge variant="secondary" className="shrink-0">{company.jobs_count} open</Badge>
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground mt-0.5">{company.description || 'No description'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 mt-4 pt-3 border-t">
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Briefcase className="h-3.5 w-3.5" />{(company as any).jobs_count ?? 0} jobs
+                    <Briefcase className="h-3.5 w-3.5" />{company.jobs_count ?? 0} open jobs
                   </div>
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Bot className="h-3.5 w-3.5" />{(company as any).agents_count ?? 0} agents
+                    <Bot className="h-3.5 w-3.5" />{company.agents_count ?? 0} agents
                   </div>
                 </div>
               </CardContent>
+
             </Card>
           ))}
         </div>
