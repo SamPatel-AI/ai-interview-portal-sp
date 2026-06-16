@@ -199,28 +199,39 @@ export interface ImportedAgent {
   system_prompt: string;
 }
 
+/** Map a raw Retell agent object (and resolve its LLM prompt) to an ImportedAgent. */
+async function mapRetellAgentToImported(a: any): Promise<ImportedAgent> {
+  const llmId = a.response_engine?.llm_id ?? null;
+  let prompt = '';
+  if (llmId) {
+    try {
+      const llmObj = await retellClient.llm.retrieve(llmId);
+      prompt = (llmObj as any).general_prompt ?? '';
+    } catch { /* leave prompt empty if the LLM cannot be fetched */ }
+  }
+  return {
+    retell_agent_id: a.agent_id,
+    retell_llm_id: llmId,
+    name: a.agent_name ?? 'Imported agent',
+    voice_id: a.voice_id ?? '',
+    language: a.language ?? 'en-US',
+    max_call_duration_sec: a.max_call_duration_ms ? Math.round(a.max_call_duration_ms / 1000) : 1200,
+    system_prompt: prompt,
+  };
+}
+
 /** List all Retell agents and resolve each one's LLM general_prompt. */
 export async function fetchRetellAgentsForImport(): Promise<ImportedAgent[]> {
   const agents = await retellClient.agent.list();
   const out: ImportedAgent[] = [];
   for (const a of agents as any[]) {
-    const llmId = a.response_engine?.llm_id ?? null;
-    let prompt = '';
-    if (llmId) {
-      try {
-        const llmObj = await retellClient.llm.retrieve(llmId);
-        prompt = (llmObj as any).general_prompt ?? '';
-      } catch { /* leave prompt empty if the LLM cannot be fetched */ }
-    }
-    out.push({
-      retell_agent_id: a.agent_id,
-      retell_llm_id: llmId,
-      name: a.agent_name ?? 'Imported agent',
-      voice_id: a.voice_id ?? '',
-      language: a.language ?? 'en-US',
-      max_call_duration_sec: a.max_call_duration_ms ? Math.round(a.max_call_duration_ms / 1000) : 1200,
-      system_prompt: prompt,
-    });
+    out.push(await mapRetellAgentToImported(a));
   }
   return out;
+}
+
+/** Retrieve a single Retell agent (and its LLM prompt) for a Retell→portal pull. */
+export async function fetchRetellAgentForPull(retellAgentId: string): Promise<ImportedAgent> {
+  const a = await retellClient.agent.retrieve(retellAgentId);
+  return mapRetellAgentToImported(a);
 }

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Use vi.hoisted so the stubs are available when vi.mock factories run.
 const { llm, agent } = vi.hoisted(() => {
   const llm = { create: vi.fn(), update: vi.fn(), retrieve: vi.fn(), delete: vi.fn() };
-  const agent = { create: vi.fn(), update: vi.fn(), delete: vi.fn(), list: vi.fn() };
+  const agent = { create: vi.fn(), update: vi.fn(), delete: vi.fn(), list: vi.fn(), retrieve: vi.fn() };
   return { llm, agent };
 });
 
@@ -11,7 +11,7 @@ const { llm, agent } = vi.hoisted(() => {
 vi.mock('../config/retell', () => ({ retellClient: { llm, agent, voice: { list: vi.fn() }, call: {}, phoneNumber: {} } }));
 vi.mock('../config/env', () => ({ env: { RETELL_FROM_NUMBER: '+10000000000', NODE_ENV: 'test', FRONTEND_URL: 'http://localhost:8082' } }));
 
-import { syncAgentToRetell, fetchRetellAgentsForImport } from './retell.service';
+import { syncAgentToRetell, fetchRetellAgentsForImport, fetchRetellAgentForPull } from './retell.service';
 
 const baseAgent = {
   id: 'a1', name: 'Test', system_prompt: 'PROMPT', builder_config: null,
@@ -82,6 +82,19 @@ describe('syncAgentToRetell', () => {
     const res = await syncAgentToRetell(bad, 'http://hook');
     expect(res.sync_status).toBe('error');
     expect(res.sync_error).toBeTruthy();
+  });
+});
+
+describe('fetchRetellAgentForPull', () => {
+  it('retrieves one agent and resolves its llm general_prompt', async () => {
+    agent.retrieve.mockResolvedValue({ agent_id: 'ag9', agent_name: 'Pulled', voice_id: 'v2', language: 'en-GB', max_call_duration_ms: 900000, response_engine: { type: 'retell-llm', llm_id: 'l9' } });
+    llm.retrieve.mockResolvedValue({ llm_id: 'l9', general_prompt: 'EDITED IN RETELL' });
+
+    const res = await fetchRetellAgentForPull('ag9');
+    expect(res).toMatchObject({
+      retell_agent_id: 'ag9', retell_llm_id: 'l9', name: 'Pulled',
+      voice_id: 'v2', language: 'en-GB', max_call_duration_sec: 900, system_prompt: 'EDITED IN RETELL',
+    });
   });
 });
 

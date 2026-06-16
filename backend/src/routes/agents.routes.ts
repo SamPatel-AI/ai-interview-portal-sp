@@ -10,6 +10,7 @@ import {
   listVoices,
   createOutboundCall,
   fetchRetellAgentsForImport,
+  fetchRetellAgentForPull,
 } from '../services/retell.service';
 import { compileSystemPrompt, buildSampleVariables } from '../utils/retellPromptBuilder';
 import { agentBodySchema, updateAgentBodySchema } from './agents.schema';
@@ -273,6 +274,47 @@ router.post('/:id/test-call', requireRole('admin', 'recruiter'), async (req: Req
     });
 
     res.json({ success: true, data: { call_id: call.callId, status: call.status } });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/agents/:id/pull ────────────────────────────
+
+router.post('/:id/pull', requireRole('admin', 'recruiter'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { data: row, error } = await supabaseAdmin
+      .from('ai_agents')
+      .select('retell_agent_id')
+      .eq('id', req.params.id)
+      .eq('org_id', req.user!.org_id)
+      .single();
+    if (error || !row) throw new AppError(404, 'Agent not found');
+    if (!row.retell_agent_id) throw new AppError(409, 'This agent is not linked to Retell yet — nothing to pull.');
+
+    const pulled = await fetchRetellAgentForPull(row.retell_agent_id);
+
+    // Pull OVERWRITES the portal copy (direction-decides). A Retell-edited prompt
+    // can't be decomposed into builder_config, so the agent becomes raw-prompt mode.
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('ai_agents')
+      .update({
+        name: pulled.name,
+        voice_id: pulled.voice_id,
+        language: pulled.language,
+        max_call_duration_sec: pulled.max_call_duration_sec,
+        system_prompt: pulled.system_prompt,
+        retell_llm_id: pulled.retell_llm_id,
+        builder_config: null,
+        sync_status: 'synced',
+        sync_error: null,
+        last_synced_at: new Date().toISOString(),
+      })
+      .eq('id', req.params.id)
+      .eq('org_id', req.user!.org_id)
+      .select()
+      .single();
+    if (updErr || !updated) throw new AppError(500, 'Failed to save pulled agent');
+
+    res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 });
 
