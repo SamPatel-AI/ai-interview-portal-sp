@@ -31,6 +31,7 @@ import { startReengagementScheduler } from './jobs/reengagement.job';
 import './jobs/emailSender.job';
 import './jobs/callRetry.job';
 import './jobs/callScheduler.job';
+import { pollScheduledCalls } from './jobs/callScheduler.job';
 import './jobs/ceipalSync.job';
 import './jobs/resumeProcessor.job';
 
@@ -107,6 +108,17 @@ app.listen(PORT, () => {
   startReengagementScheduler().catch(err => {
     logger.error('Failed to start re-engagement scheduler:', err);
   });
+
+  // Promote due scheduled calls (cal.com bookings, post-call callbacks) into the
+  // call-scheduler queue every minute. Without this, scheduled calls never dial.
+  const SCHEDULED_CALL_POLL_MS = 60_000;
+  setInterval(() => {
+    pollScheduledCalls().catch(err => {
+      logger.error('pollScheduledCalls failed:', err);
+    });
+  }, SCHEDULED_CALL_POLL_MS);
+  pollScheduledCalls().catch(err => logger.error('initial pollScheduledCalls failed:', err));
+  logger.info(`Scheduled-call poller started (every ${SCHEDULED_CALL_POLL_MS / 1000}s)`);
 });
 
 export default app;

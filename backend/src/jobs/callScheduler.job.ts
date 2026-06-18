@@ -42,11 +42,13 @@ export const callSchedulerWorker = new Worker(
       return;
     }
 
-    // Execute the call
+    // Execute the call, reusing this scheduled row (so it isn't left as
+    // 'scheduled' and re-queued/re-dialed by the next poll).
     await initiateOutboundCall({
       applicationId: call.application_id,
       orgId,
       userId: 'system', // System-initiated
+      existingCallId: call.id,
     });
 
     logger.info(`Scheduled call ${callId} executed successfully`);
