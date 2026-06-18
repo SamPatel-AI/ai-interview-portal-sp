@@ -28,6 +28,7 @@ interface InitiateCallParams {
   orgId: string;
   userId: string | null; // null for system-triggered (e.g. auto-redial)
   scheduledAt?: string; // ISO timestamp for delayed calls
+  existingCallId?: string; // reuse a pre-created (scheduled) call row instead of inserting a new one
 }
 
 /**
@@ -74,25 +75,47 @@ export async function initiateOutboundCall(params: InitiateCallParams): Promise<
     dynamicVars.company_name = job.client_companies.name;
   }
 
-  // Create call record in our DB first
-  const { data: callRecord, error: callErr } = await supabaseAdmin
-    .from('calls')
-    .insert({
-      org_id: params.orgId,
-      application_id: params.applicationId,
-      candidate_id: candidate.id,
-      ai_agent_id: agent.id,
-      direction: 'outbound',
-      status: params.scheduledAt ? 'scheduled' : 'in_progress',
-      from_number: env.RETELL_FROM_NUMBER,
-      to_number: formattedPhone,
-      scheduled_at: params.scheduledAt || null,
-      context_passed: dynamicVars,
-    })
-    .select()
-    .single();
-
-  if (callErr || !callRecord) throw new Error('Failed to create call record');
+  // Reuse a pre-created (scheduled) row when the scheduler executes it, otherwise
+  // insert a fresh call record. Reusing prevents orphaned 'scheduled' rows that the
+  // poller would otherwise re-queue (and eventually re-dial) every minute.
+  let callRecord: any;
+  if (params.existingCallId) {
+    const { data, error: updErr } = await supabaseAdmin
+      .from('calls')
+      .update({
+        ai_agent_id: agent.id,
+        status: 'in_progress',
+        from_number: env.RETELL_FROM_NUMBER,
+        to_number: formattedPhone,
+        scheduled_at: null,
+        context_passed: dynamicVars,
+      })
+      .eq('id', params.existingCallId)
+      .eq('org_id', params.orgId)
+      .select()
+      .single();
+    if (updErr || !data) throw new Error('Scheduled call record not found');
+    callRecord = data;
+  } else {
+    const { data, error: callErr } = await supabaseAdmin
+      .from('calls')
+      .insert({
+        org_id: params.orgId,
+        application_id: params.applicationId,
+        candidate_id: candidate.id,
+        ai_agent_id: agent.id,
+        direction: 'outbound',
+        status: params.scheduledAt ? 'scheduled' : 'in_progress',
+        from_number: env.RETELL_FROM_NUMBER,
+        to_number: formattedPhone,
+        scheduled_at: params.scheduledAt || null,
+        context_passed: dynamicVars,
+      })
+      .select()
+      .single();
+    if (callErr || !data) throw new Error('Failed to create call record');
+    callRecord = data;
+  }
 
   // If scheduled for later, don't call Retell now
   if (params.scheduledAt) {
