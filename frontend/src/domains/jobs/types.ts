@@ -3,7 +3,7 @@ export interface Job {
   org_id: string;
   client_company_id: string | null;
   ceipal_job_id: string | null;
-  job_code?: string | null;
+  
   title: string;
   description: string;
   skills: string[];

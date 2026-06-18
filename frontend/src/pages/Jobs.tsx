@@ -62,7 +62,7 @@ export default function Jobs() {
               <TableBody>
                 {jobs.map((j) => (
                   <TableRow key={j.id} className="cursor-pointer hover:bg-muted/50" onClick={() => { setSelectedJobId(j.id); setSheetOpen(true); }}>
-                    <TableCell className="font-mono text-sm text-muted-foreground">{j.job_code}</TableCell>
+                    <TableCell className="font-mono text-sm text-muted-foreground">{j.ceipal_job_id ?? '—'}</TableCell>
                     <TableCell className="font-medium">{j.title}</TableCell>
                     <TableCell className="text-muted-foreground">{j.client_companies?.name ?? '—'}</TableCell>
                     <TableCell>
