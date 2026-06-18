@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { derivePipelineStage } from '../utils/pipelineStage';
+import { logger } from '../utils/logger';
 import '../types';
 
 const router = Router();
@@ -303,10 +304,14 @@ router.post(
       }
 
       // Mirror the effective deadline onto the application for its own record.
-      await supabaseAdmin
+      const { error: mirrorErr } = await supabaseAdmin
         .from('applications')
         .update({ interview_deadline: deadlineDate.toISOString() })
         .eq('id', req.params.id);
+      if (mirrorErr) {
+        logger.error('approve-interview: failed to mirror deadline to application', mirrorErr);
+        throw new AppError(500, 'Failed to record the interview deadline on the application.');
+      }
 
       // Send invitation email (capped to the job deadline)
       const { sendInvitationEmail } = await import('../services/email.service');
@@ -352,7 +357,13 @@ router.post(
         .eq('org_id', req.user!.org_id)
         .single();
 
-      if (error || !app) throw new AppError(404, 'Application not found');
+      // PGRST116 = no rows (genuine 404). Any other error is a real query failure
+      // and must surface as 500 instead of being masked as "not found".
+      if (error && (error as any).code !== 'PGRST116') {
+        logger.error('resend-invitation: application query failed', error);
+        throw new AppError(500, 'Failed to load the application.');
+      }
+      if (!app) throw new AppError(404, 'Application not found');
 
       const candidate = (app.candidates as any);
       const job = (app.jobs as any);
@@ -369,15 +380,23 @@ router.post(
           throw new AppError(400, 'Interview deadline must be a future date.');
         }
         deadline = d;
-        await supabaseAdmin
+        const { error: appErr } = await supabaseAdmin
           .from('applications')
           .update({ interview_deadline: d.toISOString() })
           .eq('id', app.id);
+        if (appErr) {
+          logger.error('resend-invitation: failed to update application deadline', appErr);
+          throw new AppError(500, 'Failed to update the interview deadline.');
+        }
         if (job?.id) {
-          await supabaseAdmin
+          const { error: jobErr } = await supabaseAdmin
             .from('jobs')
             .update({ interview_deadline: d.toISOString() })
             .eq('id', job.id);
+          if (jobErr) {
+            logger.error('resend-invitation: failed to update job deadline', jobErr);
+            throw new AppError(500, 'Failed to update the interview deadline.');
+          }
         }
       }
       if (!deadline || deadline.getTime() <= Date.now()) {

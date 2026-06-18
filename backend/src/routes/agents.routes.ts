@@ -282,7 +282,12 @@ router.post('/:id/default', requireRole('admin'), async (req: Request, res: Resp
 
 // ─── POST /api/agents/:id/test-call ───────────────────────
 
-const testCallSchema = z.object({ phone_number: z.string().min(8).max(20) });
+const testCallSchema = z.object({
+  phone_number: z.string().trim().refine(
+    (v) => { const d = v.replace(/\D/g, ''); return d.length >= 10 && d.length <= 15; },
+    'Enter a valid phone number (10–15 digits, optionally with country code).',
+  ),
+});
 
 router.post('/:id/test-call', requireRole('admin', 'recruiter'), async (req: Request, res: Response, next: NextFunction) => {
   try {

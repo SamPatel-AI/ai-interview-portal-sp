@@ -273,10 +273,10 @@ router.post('/cal-booking', requireWebhookSecret, async (req: Request, res: Resp
     const appJob = (application.jobs as any);
     const appAgent = (appJob?.ai_agents as any);
 
+    // Don't hard-fail when the job has no agent: initiateOutboundCall falls back
+    // to the org's default active agent. Only warn so the fallback can run.
     if (!appAgent?.retell_agent_id) {
-      logger.warn(`Cal booking: no AI agent assigned to job for ${candidateEmail}`);
-      res.json({ received: true, error: 'No agent assigned' });
-      return;
+      logger.warn(`Cal booking: job has no agent for ${candidateEmail}; will use org default agent`);
     }
 
     // Schedule the outbound call for the booked time
