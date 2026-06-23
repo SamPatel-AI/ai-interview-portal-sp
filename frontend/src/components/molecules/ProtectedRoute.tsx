@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { hasSupabaseConfig } from '@/lib/supabase';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -12,10 +13,9 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     );
   }
 
-  // Allow access in demo mode (no Supabase key configured)
-  const hasSupabaseKey = Boolean(import.meta.env.VITE_SUPABASE_ANON_KEY);
-  if (!hasSupabaseKey) return <>{children}</>;
+  if (!hasSupabaseConfig) return <>{children}</>;
 
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
+
