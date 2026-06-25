@@ -21,7 +21,7 @@ export const emailQueue = new Queue('email-sender', {
 export const emailWorker = new Worker(
   'email-sender',
   async (job) => {
-    const { type, candidateId, applicationId, jobTitle } = job.data;
+    const { type, candidateId, applicationId, jobTitle, jobId } = job.data;
 
     // Fetch candidate
     const { data: candidate, error } = await supabaseAdmin
@@ -37,13 +37,13 @@ export const emailWorker = new Worker(
 
     switch (type) {
       case 'invitation':
-        await sendInvitationEmail(candidate, jobTitle, applicationId);
+        await sendInvitationEmail(candidate, jobTitle, applicationId, null, jobId);
         break;
       case 'rejection':
         await sendRejectionEmail(candidate, jobTitle, applicationId);
         break;
       case 'follow_up':
-        await sendFollowUpEmail(candidate, jobTitle, applicationId);
+        await sendFollowUpEmail(candidate, jobTitle, applicationId, jobId);
         break;
       case 're_engagement':
         await sendReEngagementEmail(
@@ -81,6 +81,7 @@ export async function queueEmail(params: {
   candidateId: string;
   applicationId: string;
   jobTitle: string;
+  jobId?: string;
   companyName?: string;
   jobDescription?: string;
 }): Promise<void> {
@@ -104,7 +105,7 @@ export async function sendPendingInvitations(orgId: string): Promise<number> {
     .select(`
       id,
       candidates (id, first_name, last_name, email),
-      jobs (title)
+      jobs (id, title)
     `)
     .eq('org_id', orgId)
     .eq('status', 'new')
@@ -134,6 +135,7 @@ export async function sendPendingInvitations(orgId: string): Promise<number> {
       candidateId: candidate.id,
       applicationId: app.id,
       jobTitle: job.title,
+      jobId: job.id,
     });
 
     sent++;

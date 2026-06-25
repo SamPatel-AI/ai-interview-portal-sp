@@ -313,13 +313,22 @@ router.post(
         throw new AppError(500, 'Failed to record the interview deadline on the application.');
       }
 
+      // Drive the booking window into Cal.com so candidates can't pick a slot
+      // past the deadline (UX layer; the webhook backstop guarantees correctness
+      // regardless). Best-effort — never block the invite on a Cal.com hiccup.
+      const { setEventTypeBookingWindow } = await import('../services/cal.service');
+      setEventTypeBookingWindow(deadlineDate).catch((e) =>
+        logger.error('approve-interview: failed to set Cal.com booking window', e),
+      );
+
       // Send invitation email (capped to the job deadline)
       const { sendInvitationEmail } = await import('../services/email.service');
       await sendInvitationEmail(
         { id: candidate.id, first_name: candidate.first_name, last_name: candidate.last_name, email: candidate.email },
         job.title,
         req.params.id as string,
-        deadlineDate
+        deadlineDate,
+        job.id
       );
 
       await supabaseAdmin.from('activity_log').insert({
@@ -406,12 +415,19 @@ router.post(
         );
       }
 
+      // Keep Cal.com's bookable window aligned with the (possibly extended) deadline.
+      const { setEventTypeBookingWindow } = await import('../services/cal.service');
+      setEventTypeBookingWindow(deadline).catch((e) =>
+        logger.error('resend-invitation: failed to set Cal.com booking window', e),
+      );
+
       const { sendInvitationEmail } = await import('../services/email.service');
       await sendInvitationEmail(
         { id: candidate.id, first_name: candidate.first_name, last_name: candidate.last_name, email: candidate.email },
         job.title,
         app.id,
-        deadline
+        deadline,
+        job?.id
       );
 
       await supabaseAdmin.from('activity_log').insert({

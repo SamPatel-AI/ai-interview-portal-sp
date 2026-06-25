@@ -6,6 +6,9 @@ import { phonesMatch } from '../utils/phone';
 import { scheduleCallRetry } from '../jobs/callRetry.job';
 import { buildInboundContext } from '../utils/retellPromptBuilder';
 import { verifyRetellSignature, requireWebhookSecret } from '../middleware/webhookAuth';
+import { cancelBooking } from '../services/cal.service';
+import { notifyBookingIssue } from '../services/notification.service';
+import { ingestCandidate } from '../services/intake.service';
 
 const router = Router();
 
@@ -38,101 +41,34 @@ router.post('/candidate-intake', requireWebhookSecret, async (req: Request, res:
 
     logger.info(`Candidate intake: ${email} for org ${org_id}`);
 
-    // 1. Upsert candidate (create or find existing by email within org)
+    // 1-3. Upsert candidate + resolve job + create application (shared with the
+    // CEIPAL submissions poll). This path supplies resume_text (no résumé bytes),
+    // so the service does NOT enqueue resume-processor; we screen inline below.
     let candidateId: string;
-
-    const { data: existing } = await supabaseAdmin
-      .from('candidates')
-      .select('id')
-      .eq('org_id', org_id)
-      .eq('email', email.toLowerCase())
-      .single();
-
-    if (existing) {
-      candidateId = existing.id;
-      // Update fields if provided
-      await supabaseAdmin
-        .from('candidates')
-        .update({
-          ...(first_name && { first_name }),
-          ...(last_name && { last_name }),
-          ...(phone && { phone }),
-          ...(location && { location }),
-          ...(work_authorization && { work_authorization }),
-          ...(resume_text && { resume_text }),
-          ...(resume_url && { resume_url }),
-        })
-        .eq('id', candidateId);
-    } else {
-      const { data: newCand, error: candErr } = await supabaseAdmin
-        .from('candidates')
-        .insert({
-          org_id,
-          first_name: first_name || 'Unknown',
-          last_name: last_name || '',
-          email: email.toLowerCase(),
-          phone: phone || null,
-          location: location || null,
-          work_authorization: work_authorization || null,
-          resume_text: resume_text || null,
-          resume_url: resume_url || null,
-          source: source || 'webhook',
-        })
-        .select('id')
-        .single();
-
-      if (candErr || !newCand) {
-        logger.error('Failed to create candidate:', candErr);
-        res.status(500).json({ error: 'Failed to create candidate' });
-        return;
-      }
-      candidateId = newCand.id;
-    }
-
-    // 2. Find the job (by job_id or CEIPAL job_code)
-    let resolvedJobId: string | null = job_id || null;
-
-    if (!resolvedJobId && job_code) {
-      const { data: job } = await supabaseAdmin
-        .from('jobs')
-        .select('id')
-        .eq('org_id', org_id)
-        .eq('ceipal_job_id', job_code)
-        .single();
-
-      resolvedJobId = job?.id || null;
-    }
-
-    // 3. Create application if we have a job
-    let applicationId: string | null = null;
-
-    if (resolvedJobId) {
-      // Check if application already exists
-      const { data: existingApp } = await supabaseAdmin
-        .from('applications')
-        .select('id')
-        .eq('candidate_id', candidateId)
-        .eq('job_id', resolvedJobId)
-        .single();
-
-      if (existingApp) {
-        applicationId = existingApp.id;
-      } else {
-        const { data: newApp, error: appErr } = await supabaseAdmin
-          .from('applications')
-          .insert({
-            org_id,
-            candidate_id: candidateId,
-            job_id: resolvedJobId,
-            status: 'new',
-          })
-          .select('id')
-          .single();
-
-        if (!appErr && newApp) {
-          applicationId = newApp.id;
-        }
-      }
+    let resolvedJobId: string | null;
+    let applicationId: string | null;
+    try {
+      const result = await ingestCandidate({
+        orgId: org_id,
+        email,
+        firstName: first_name,
+        lastName: last_name,
+        phone,
+        location,
+        workAuthorization: work_authorization,
+        source: source || 'webhook',
+        resolvedJobId: job_id || null,
+        jobCode: job_code || null,
+        resumeText: resume_text || null,
+        resumeUrl: resume_url || null,
+      });
+      candidateId = result.candidateId;
+      resolvedJobId = result.resolvedJobId;
+      applicationId = result.applicationId;
+    } catch (err) {
+      logger.error('Failed to ingest candidate:', err);
+      res.status(500).json({ error: 'Failed to create candidate' });
+      return;
     }
 
     // 4. Auto-trigger AI screening if we have resume text + application
@@ -200,6 +136,13 @@ router.post('/candidate-intake', requireWebhookSecret, async (req: Request, res:
 // Auto-schedules the outbound Retell AI call for that time slot.
 // This closes the loop: recruiter approves → email sent → candidate books → AI calls.
 
+// Shape returned by the application lookups below.
+const APP_SELECT = `
+  id, job_id, org_id, status,
+  candidates (id, org_id, first_name, last_name, email, phone),
+  jobs (id, title, interview_deadline, ai_agent_id, ai_agents (id, retell_agent_id))
+`;
+
 router.post('/cal-booking', requireWebhookSecret, async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const body = typeof req.body === 'string'
@@ -212,81 +155,317 @@ router.post('/cal-booking', requireWebhookSecret, async (req: Request, res: Resp
     const payload = body.payload || body;
     const eventType = body.triggerEvent || body.type || '';
 
-    // Only process booking creation events
+    // ── BOOKING_RESCHEDULED (WS6) ─────────────────────────────
+    // Match the existing scheduled call by its Cal.com uid and move it to the
+    // new time. Cal.com may mint a new uid on reschedule, so match on either the
+    // prior uid (rescheduleUid) or the new one, then track the new uid forward.
+    if (eventType === 'BOOKING_RESCHEDULED' || eventType === 'booking.rescheduled') {
+      const newStart: string | null = payload.startTime || payload.start_time || null;
+      const newUid: string | null = payload.uid || payload.bookingUid || null;
+      const oldUid: string | null =
+        payload.rescheduleUid || payload.fromReschedule || payload.originalRescheduledBooking?.uid || null;
+      const uids = [oldUid, newUid].filter(Boolean) as string[];
+
+      if (!newStart || uids.length === 0) {
+        logger.error(`Cal reschedule webhook missing start/uid (newUid=${newUid}, oldUid=${oldUid})`);
+        res.json({ received: true, handled: false, error: 'Missing data' });
+        return;
+      }
+
+      const { data: call, error } = await supabaseAdmin
+        .from('calls')
+        .select('id, org_id, status, application_id, cal_booking_uid, applications (id, jobs (id, title, interview_deadline))')
+        .in('cal_booking_uid', uids)
+        .maybeSingle();
+      if (error) {
+        logger.error('Cal reschedule: call lookup failed (transient):', error);
+        res.status(500).json({ received: false, error: 'Database error' });
+        return;
+      }
+      if (!call) {
+        logger.error(`Cal reschedule UNMATCHED — no scheduled call for uids ${uids.join(',')}`);
+        res.json({ received: true, handled: false, error: 'No matching call' });
+        return;
+      }
+      if (call.status !== 'scheduled') {
+        logger.warn(`Cal reschedule: call ${call.id} is '${call.status}', not rescheduling`);
+        res.json({ received: true, handled: false, reason: `call_${call.status}` });
+        return;
+      }
+
+      const job = (call as any).applications?.jobs;
+      // Re-apply the deadline backstop to the new time.
+      if (job?.interview_deadline && new Date(newStart).getTime() > new Date(job.interview_deadline).getTime()) {
+        let cancelled = false;
+        if (newUid) cancelled = await cancelBooking(newUid, 'Rescheduled to after the interview deadline.');
+        await supabaseAdmin.from('calls').update({ status: 'cancelled' }).eq('id', call.id);
+        await notifyBookingIssue({
+          orgId: call.org_id,
+          entityType: 'application',
+          entityId: call.application_id,
+          action: 'reschedule_after_deadline',
+          message: `A reschedule moved the call to ${newStart}, after the ${job.title} deadline (${job.interview_deadline}). Call cancelled.`,
+          details: { scheduled_at: newStart, deadline: job.interview_deadline, booking_uid: newUid, cancelled },
+        });
+        res.json({ received: true, handled: true, scheduled: false, reason: 'after_deadline', cancelled });
+        return;
+      }
+
+      await supabaseAdmin
+        .from('calls')
+        .update({ scheduled_at: new Date(newStart).toISOString(), cal_booking_uid: newUid || call.cal_booking_uid })
+        .eq('id', call.id);
+      await supabaseAdmin.from('activity_log').insert({
+        org_id: call.org_id,
+        entity_type: 'call',
+        entity_id: call.id,
+        action: 'interview_rescheduled',
+        details: { scheduled_at: newStart, booking_uid: newUid, booking_source: 'cal.com' },
+      });
+      logger.info(`Rescheduled call ${call.id} to ${newStart}`);
+      res.json({ received: true, handled: true, rescheduled: true, call_id: call.id, scheduled_at: newStart });
+      return;
+    }
+
+    // ── BOOKING_CANCELLED (WS6) ───────────────────────────────
+    if (eventType === 'BOOKING_CANCELLED' || eventType === 'booking.cancelled') {
+      const uid: string | null = payload.uid || payload.bookingUid || body.uid || null;
+      if (!uid) {
+        logger.error('Cal cancel webhook missing booking uid');
+        res.json({ received: true, handled: false, error: 'Missing uid' });
+        return;
+      }
+
+      const { data: call, error } = await supabaseAdmin
+        .from('calls')
+        .select('id, org_id, status, application_id')
+        .eq('cal_booking_uid', uid)
+        .maybeSingle();
+      if (error) {
+        logger.error('Cal cancel: call lookup failed (transient):', error);
+        res.status(500).json({ received: false, error: 'Database error' });
+        return;
+      }
+      if (!call) {
+        logger.warn(`Cal cancel: no call found for booking ${uid}`);
+        res.json({ received: true, handled: false, error: 'No matching call' });
+        return;
+      }
+      // Only cancel a still-pending call; never touch one already dialing/completed.
+      if (call.status !== 'scheduled') {
+        logger.info(`Cal cancel: call ${call.id} is '${call.status}', leaving as-is`);
+        res.json({ received: true, handled: false, reason: `call_${call.status}` });
+        return;
+      }
+
+      await supabaseAdmin.from('calls').update({ status: 'cancelled' }).eq('id', call.id);
+      await supabaseAdmin.from('activity_log').insert({
+        org_id: call.org_id,
+        entity_type: 'call',
+        entity_id: call.id,
+        action: 'interview_cancelled',
+        details: { booking_uid: uid, booking_source: 'cal.com' },
+      });
+      logger.info(`Cancelled scheduled call ${call.id} (Cal.com booking ${uid} cancelled)`);
+      res.json({ received: true, handled: true, cancelled: true, call_id: call.id });
+      return;
+    }
+
+    // Anything else: only BOOKING_CREATED proceeds below.
     if (eventType !== 'BOOKING_CREATED' && eventType !== 'booking.created') {
-      res.json({ received: true, skipped: true });
+      res.json({ received: true, skipped: true, event: eventType });
       return;
     }
 
-    // Extract attendee email from Cal.com booking
+    const metadata = payload.metadata || {};
+    const metaApplicationId: string | null = metadata.application_id || null;
+    const bookingUid: string | null = payload.uid || payload.bookingUid || body.uid || null;
+
     const attendees = payload.attendees || [];
-    const candidateEmail = attendees[0]?.email?.toLowerCase() || payload.email?.toLowerCase();
-    const scheduledStart = payload.startTime || payload.start_time;
+    const candidateEmail: string | null =
+      attendees[0]?.email?.toLowerCase() || payload.email?.toLowerCase() || null;
+    const scheduledStart: string | null = payload.startTime || payload.start_time || null;
 
-    if (!candidateEmail || !scheduledStart) {
-      logger.warn('Cal booking webhook missing email or start time');
-      res.json({ received: true, error: 'Missing data' });
+    if (!scheduledStart) {
+      // Malformed payload — retrying won't help, so acknowledge (200) but log loudly.
+      logger.error(`Cal booking webhook missing start time (uid=${bookingUid}, email=${candidateEmail})`);
+      res.json({ received: true, scheduled: false, error: 'Missing start time' });
       return;
     }
 
-    logger.info(`Cal.com booking: ${candidateEmail} at ${scheduledStart}`);
+    // ── Idempotency (WS6) ─────────────────────────────────────
+    // Cal.com may deliver the same BOOKING_CREATED more than once. If we've
+    // already created a call for this booking uid, ack and do nothing.
+    if (bookingUid) {
+      const { data: existingCall } = await supabaseAdmin
+        .from('calls')
+        .select('id, status')
+        .eq('cal_booking_uid', bookingUid)
+        .maybeSingle();
+      if (existingCall) {
+        logger.info(`Cal booking ${bookingUid} already processed (call ${existingCall.id}) — duplicate ignored`);
+        res.json({ received: true, matched: true, scheduled: true, duplicate: true, call_id: existingCall.id });
+        return;
+      }
+    }
 
-    // Find the candidate by email
-    const { data: candidate } = await supabaseAdmin
-      .from('candidates')
-      .select('id, org_id, first_name, last_name, phone')
-      .eq('email', candidateEmail)
-      .limit(1)
-      .single();
+    logger.info(`Cal.com booking: email=${candidateEmail} application_id=${metaApplicationId} at ${scheduledStart}`);
 
-    if (!candidate) {
-      logger.warn(`Cal booking: candidate not found for ${candidateEmail}`);
-      res.json({ received: true, error: 'Candidate not found' });
+    // ── Resolve the EXACT application (WS3) ───────────────────
+    // 1) Authoritative: metadata.application_id carried through the invite link.
+    // 2) Fallback: email match → candidate → most-recent active application.
+    let application: any = null;
+    let candidate: any = null;
+
+    if (metaApplicationId) {
+      const { data, error } = await supabaseAdmin
+        .from('applications')
+        .select(APP_SELECT)
+        .eq('id', metaApplicationId)
+        .maybeSingle();
+      if (error) {
+        logger.error('Cal booking: application lookup by id failed (transient):', error);
+        res.status(500).json({ received: false, error: 'Database error' }); // let Cal.com retry
+        return;
+      }
+      application = data || null;
+      candidate = application?.candidates || null;
+    }
+
+    if (!application && candidateEmail) {
+      const { data: cand, error: candErr } = await supabaseAdmin
+        .from('candidates')
+        .select('id, org_id, first_name, last_name, email, phone')
+        .eq('email', candidateEmail)
+        .limit(1)
+        .maybeSingle();
+      if (candErr) {
+        logger.error('Cal booking: candidate lookup failed (transient):', candErr);
+        res.status(500).json({ received: false, error: 'Database error' });
+        return;
+      }
+      candidate = cand || null;
+      if (candidate) {
+        const { data: app, error: appErr } = await supabaseAdmin
+          .from('applications')
+          .select(APP_SELECT)
+          .eq('candidate_id', candidate.id)
+          .in('status', ['shortlisted', 'screening', 'new'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (appErr) {
+          logger.error('Cal booking: application lookup by candidate failed (transient):', appErr);
+          res.status(500).json({ received: false, error: 'Database error' });
+          return;
+        }
+        application = app || null;
+        if (application) candidate = application.candidates || candidate;
+      }
+    }
+
+    // ── Unmatchable booking (WS7) ─────────────────────────────
+    // No org context here, so activity_log can't record it — log loudly and ack
+    // (200, since retrying can't create a matching application).
+    if (!application || !candidate) {
+      logger.error(
+        `Cal booking UNMATCHED — no application found (email=${candidateEmail}, ` +
+        `application_id=${metaApplicationId}, uid=${bookingUid}). No AI call will be scheduled.`,
+      );
+      res.json({ received: true, matched: false, scheduled: false, error: 'No matching application' });
       return;
     }
 
+    const orgId: string = candidate.org_id || application.org_id;
+    const appJob = application.jobs as any;
+    const appAgent = appJob?.ai_agents as any;
+
+    // ── No phone (WS7): loud + recruiter notice, then ack ─────
     if (!candidate.phone) {
-      logger.warn(`Cal booking: candidate ${candidateEmail} has no phone number`);
-      res.json({ received: true, error: 'No phone number' });
+      await notifyBookingIssue({
+        orgId,
+        entityType: 'application',
+        entityId: application.id,
+        action: 'booking_no_phone',
+        message: `${candidate.email} booked an interview but has no phone number — the AI call cannot be placed.`,
+        details: { candidate_email: candidate.email, scheduled_at: scheduledStart, booking_uid: bookingUid, job_title: appJob?.title },
+      });
+      res.json({ received: true, matched: true, scheduled: false, error: 'No phone number' });
       return;
     }
 
-    // Find their active application (shortlisted = approved by recruiter)
-    const { data: application } = await supabaseAdmin
-      .from('applications')
-      .select(`
-        id, job_id,
-        jobs (id, title, ai_agent_id, ai_agents (id, retell_agent_id))
-      `)
-      .eq('candidate_id', candidate.id)
-      .in('status', ['shortlisted', 'screening', 'new'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    // ── Deadline backstop (WS4, authoritative) ────────────────
+    if (appJob?.interview_deadline) {
+      const deadline = new Date(appJob.interview_deadline);
+      if (new Date(scheduledStart).getTime() > deadline.getTime()) {
+        let cancelled = false;
+        if (bookingUid) cancelled = await cancelBooking(bookingUid, 'Booked after the interview deadline for this role.');
 
-    if (!application) {
-      logger.warn(`Cal booking: no active application for ${candidateEmail}`);
-      res.json({ received: true, error: 'No active application' });
-      return;
+        await notifyBookingIssue({
+          orgId,
+          entityType: 'application',
+          entityId: application.id,
+          action: 'booking_after_deadline',
+          message:
+            `${candidate.email} booked ${scheduledStart}, which is after the ${appJob.title} deadline ` +
+            `(${deadline.toISOString()}). No call scheduled` +
+            (cancelled ? '; the Cal.com booking was cancelled.' : '; Cal.com booking NOT cancelled (CAL_API_KEY missing).'),
+          details: { scheduled_at: scheduledStart, deadline: deadline.toISOString(), booking_uid: bookingUid, cancelled },
+        });
+
+        // Re-invite if the deadline is still in the future (candidate can pick an earlier slot).
+        if (deadline.getTime() > Date.now()) {
+          try {
+            const { sendInvitationEmail } = await import('../services/email.service');
+            await sendInvitationEmail(
+              { id: candidate.id, first_name: candidate.first_name, last_name: candidate.last_name, email: candidate.email },
+              appJob.title,
+              application.id,
+              deadline,
+              appJob.id,
+            );
+          } catch (e) {
+            logger.error('Cal booking: re-invite after late booking failed:', e);
+          }
+        }
+
+        res.json({ received: true, matched: true, scheduled: false, reason: 'after_deadline', cancelled });
+        return;
+      }
     }
-
-    const appJob = (application.jobs as any);
-    const appAgent = (appJob?.ai_agents as any);
 
     // Don't hard-fail when the job has no agent: initiateOutboundCall falls back
     // to the org's default active agent. Only warn so the fallback can run.
     if (!appAgent?.retell_agent_id) {
-      logger.warn(`Cal booking: job has no agent for ${candidateEmail}; will use org default agent`);
+      logger.warn(`Cal booking: job has no agent for ${candidate.email}; will use org default agent`);
     }
 
-    // Schedule the outbound call for the booked time
+    // ── Schedule the outbound call for the booked time ────────
     const { initiateOutboundCall } = await import('../services/call.service');
-    const call = await initiateOutboundCall({
-      applicationId: application.id,
-      orgId: candidate.org_id,
-      userId: 'system',
-      scheduledAt: new Date(scheduledStart).toISOString(),
-    });
+    let call;
+    try {
+      call = await initiateOutboundCall({
+        applicationId: application.id,
+        orgId,
+        userId: 'system',
+        scheduledAt: new Date(scheduledStart).toISOString(),
+        calBookingUid: bookingUid || undefined,
+      });
+    } catch (scheduleErr) {
+      // Loud failure (WS7): record + notify, then 500 so Cal.com retries (the
+      // cause — e.g. no agent configured — may be fixed before the next retry).
+      await notifyBookingIssue({
+        orgId,
+        entityType: 'application',
+        entityId: application.id,
+        action: 'booking_schedule_failed',
+        message: `Failed to schedule the AI call for ${candidate.email}: ${String(scheduleErr)}`,
+        details: { scheduled_at: scheduledStart, booking_uid: bookingUid, job_title: appJob?.title },
+      });
+      logger.error(`Cal booking: scheduling failed for ${candidate.email}:`, scheduleErr);
+      res.status(500).json({ received: false, error: 'Failed to schedule call' });
+      return;
+    }
 
     // Update application status to show interview is booked
     await supabaseAdmin
@@ -296,29 +475,34 @@ router.post('/cal-booking', requireWebhookSecret, async (req: Request, res: Resp
 
     // Log activity
     await supabaseAdmin.from('activity_log').insert({
-      org_id: candidate.org_id,
+      org_id: orgId,
       entity_type: 'call',
       entity_id: call.id,
       action: 'interview_booked',
       details: {
-        candidate_email: candidateEmail,
+        candidate_email: candidate.email,
         candidate_name: `${candidate.first_name} ${candidate.last_name}`,
         scheduled_at: scheduledStart,
         job_title: appJob?.title,
+        booking_uid: bookingUid,
+        matched_by: metaApplicationId ? 'metadata' : 'email',
         booking_source: 'cal.com',
       },
     });
 
-    logger.info(`Auto-scheduled call ${call.id} for ${candidateEmail} at ${scheduledStart}`);
+    logger.info(`Auto-scheduled call ${call.id} for ${candidate.email} at ${scheduledStart}`);
 
     res.json({
       received: true,
+      matched: true,
+      scheduled: true,
       call_id: call.id,
       scheduled_at: scheduledStart,
     });
   } catch (err) {
+    // Transient/internal error — return 5xx so Cal.com retries the delivery.
     logger.error('Cal.com booking webhook error:', err);
-    res.json({ received: true, error: 'Processing failed' });
+    res.status(500).json({ received: false, error: 'Processing failed' });
   }
 });
 
