@@ -30,19 +30,120 @@ function getTransporter(): nodemailer.Transporter | null {
   return smtpTransporter;
 }
 
-// ─── Email Templates ───────────────────────────────────────
+// ─── Microsoft Graph sender (client-credentials / app-only) ─
 
-const CAL_BASE_URL = 'https://cal.com/saanvitech/screen-interview-x-saanvi-tech';
+let graphToken: { value: string; expiresAt: number } | null = null;
 
-function buildCalUrl(deadline?: Date | null): string {
-  if (!deadline) return CAL_BASE_URL;
-  // Cal.com supports ?date= to open to a specific date and ?endDate= to cap booking window
-  const dateStr = deadline.toISOString().split('T')[0]; // YYYY-MM-DD
-  return `${CAL_BASE_URL}?endDate=${dateStr}`;
+/** Fetch (and cache) an app-only Graph access token via client credentials. */
+async function getGraphToken(): Promise<string> {
+  if (graphToken && graphToken.expiresAt > Date.now() + 60_000) {
+    return graphToken.value;
+  }
+
+  const tenant = env.MS_GRAPH_TENANT_ID;
+  const clientId = env.MS_GRAPH_CLIENT_ID;
+  const clientSecret = env.MS_GRAPH_CLIENT_SECRET;
+  if (!tenant || !clientId || !clientSecret) {
+    throw new Error('Microsoft Graph not configured (MS_GRAPH_TENANT_ID/CLIENT_ID/CLIENT_SECRET)');
+  }
+
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope: 'https://graph.microsoft.com/.default',
+    grant_type: 'client_credentials',
+  });
+
+  const resp = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+
+  const data = (await resp.json()) as { access_token?: string; expires_in?: number; error_description?: string };
+  if (!resp.ok || !data.access_token) {
+    throw new Error(`Graph token request failed (${resp.status}): ${data.error_description || 'unknown error'}`);
+  }
+
+  graphToken = {
+    value: data.access_token,
+    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
+  };
+  return graphToken.value;
 }
 
-function invitationTemplate(candidateName: string, jobTitle: string, deadline?: Date | null): { subject: string; body: string } {
-  const calUrl = buildCalUrl(deadline);
+/** Send an HTML email via Microsoft Graph sendMail. Throws on failure. */
+async function sendViaGraph(toEmail: string, subject: string, html: string): Promise<void> {
+  const sender = env.MS_GRAPH_SENDER || env.SMTP_FROM;
+  if (!sender) {
+    throw new Error('MS_GRAPH_SENDER (sending mailbox) is not configured');
+  }
+
+  const token = await getGraphToken();
+  const resp = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: {
+          subject,
+          body: { contentType: 'HTML', content: html },
+          toRecipients: [{ emailAddress: { address: toEmail } }],
+        },
+        saveToSentItems: true,
+      }),
+    }
+  );
+
+  if (resp.status !== 202) {
+    const detail = await resp.text();
+    throw new Error(`Graph sendMail failed (${resp.status}): ${detail.slice(0, 400)}`);
+  }
+}
+
+// ─── Email Templates ───────────────────────────────────────
+
+interface CalLinkParams {
+  deadline?: Date | null;
+  email?: string;
+  name?: string;
+  applicationId?: string;
+  jobId?: string;
+}
+
+/**
+ * Build the Cal.com booking URL, carrying the candidate's identity through the
+ * link so the booking can be matched back to the EXACT application — not by a
+ * fragile email lookup. Prefills name/email and attaches application_id/job_id
+ * as Cal.com booking metadata (surfaced on the BOOKING_CREATED webhook payload).
+ */
+function buildCalUrl(params: CalLinkParams = {}): string {
+  const base = env.CAL_BASE_URL;
+  const qs = new URLSearchParams();
+
+  if (params.name) qs.set('name', params.name);
+  if (params.email) qs.set('email', params.email);
+  if (params.applicationId) qs.set('metadata[application_id]', params.applicationId);
+  if (params.jobId) qs.set('metadata[job_id]', params.jobId);
+  // ?endDate caps the visible window to the deadline (soft hint; the authoritative
+  // enforcement is the webhook backstop + per-job availability).
+  if (params.deadline) qs.set('endDate', params.deadline.toISOString().split('T')[0]);
+
+  const query = qs.toString();
+  return query ? `${base}?${query}` : base;
+}
+
+function invitationTemplate(
+  candidateName: string,
+  jobTitle: string,
+  deadline?: Date | null,
+  link?: Omit<CalLinkParams, 'deadline'>,
+): { subject: string; body: string } {
+  const calUrl = buildCalUrl({ deadline, ...link });
   const deadlineNote = deadline
     ? `<p style="color:#c0392b; font-weight:bold;">⚠️ Booking Deadline: ${deadline.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. Please book your slot before this date — slots after this deadline will not be available.</p>`
     : '';
@@ -101,7 +202,12 @@ function rejectionTemplate(candidateName: string, jobTitle: string): { subject: 
   };
 }
 
-function followUpTemplate(candidateName: string, jobTitle: string): { subject: string; body: string } {
+function followUpTemplate(
+  candidateName: string,
+  jobTitle: string,
+  link?: Omit<CalLinkParams, 'deadline'>,
+): { subject: string; body: string } {
+  const calUrl = buildCalUrl({ ...link });
   return {
     subject: `Follow Up - Interview Scheduling for ${jobTitle}`,
     body: `<div style="font-family: Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #222;">
@@ -110,7 +216,7 @@ function followUpTemplate(candidateName: string, jobTitle: string): { subject: s
   <p>We noticed you haven't scheduled your screening interview for the <strong>${jobTitle}</strong> role yet.</p>
 
   <p>If you're still interested, please book a slot using the link below:<br>
-  <a href="https://cal.com/saanvitech/screen-interview-x-saanvi-tech">Schedule Interview</a></p>
+  <a href="${calUrl}">Schedule Interview</a></p>
 
   <p>If you have any questions or would like to withdraw your application, simply reply to this email.</p>
 
@@ -139,23 +245,33 @@ export async function sendEmail(params: {
 
   let status: 'sent' | 'failed' = 'sent';
 
-  // Try SMTP delivery if configured
-  const transporter = getTransporter();
-  if (transporter) {
+  if (env.EMAIL_TRANSPORT === 'graph') {
     try {
-      await transporter.sendMail({
-        from: env.SMTP_FROM || env.SMTP_USER,
-        to: params.toEmail,
-        subject: params.subject,
-        html: params.body,
-      });
-      logger.info(`Email delivered via SMTP to ${params.toEmail}`);
+      await sendViaGraph(params.toEmail, params.subject, params.body);
+      logger.info(`Email delivered via Microsoft Graph to ${params.toEmail}`);
     } catch (err) {
-      logger.error(`SMTP delivery failed for ${params.toEmail}:`, err);
+      logger.error(`Graph delivery failed for ${params.toEmail}:`, err);
       status = 'failed';
     }
   } else {
-    logger.info(`[LOG MODE] Would send ${params.type} email to ${params.toEmail}`);
+    // Try SMTP delivery if configured
+    const transporter = getTransporter();
+    if (transporter) {
+      try {
+        await transporter.sendMail({
+          from: env.SMTP_FROM || env.SMTP_USER,
+          to: params.toEmail,
+          subject: params.subject,
+          html: params.body,
+        });
+        logger.info(`Email delivered via SMTP to ${params.toEmail}`);
+      } catch (err) {
+        logger.error(`SMTP delivery failed for ${params.toEmail}:`, err);
+        status = 'failed';
+      }
+    } else {
+      logger.info(`[LOG MODE] Would send ${params.type} email to ${params.toEmail}`);
+    }
   }
 
   await supabaseAdmin.from('email_logs').insert({
@@ -175,10 +291,16 @@ export async function sendInvitationEmail(
   candidate: Pick<Candidate, 'id' | 'first_name' | 'last_name' | 'email'>,
   jobTitle: string,
   applicationId: string,
-  deadline?: Date | null
+  deadline?: Date | null,
+  jobId?: string
 ): Promise<void> {
   const candidateName = `${candidate.first_name} ${candidate.last_name}`.trim();
-  const template = invitationTemplate(candidateName, jobTitle, deadline);
+  const template = invitationTemplate(candidateName, jobTitle, deadline, {
+    email: candidate.email,
+    name: candidateName,
+    applicationId,
+    jobId,
+  });
 
   await sendEmail({
     candidateId: candidate.id,
@@ -217,10 +339,16 @@ export async function sendRejectionEmail(
 export async function sendFollowUpEmail(
   candidate: Pick<Candidate, 'id' | 'first_name' | 'last_name' | 'email'>,
   jobTitle: string,
-  applicationId: string
+  applicationId: string,
+  jobId?: string
 ): Promise<void> {
   const candidateName = `${candidate.first_name} ${candidate.last_name}`.trim();
-  const template = followUpTemplate(candidateName, jobTitle);
+  const template = followUpTemplate(candidateName, jobTitle, {
+    email: candidate.email,
+    name: candidateName,
+    applicationId,
+    jobId,
+  });
 
   await sendEmail({
     candidateId: candidate.id,

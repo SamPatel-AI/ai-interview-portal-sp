@@ -15,7 +15,7 @@ export type JobStatus = 'open' | 'closed' | 'on_hold' | 'filled';
 export type EmploymentType = 'full_time' | 'contract' | 'c2c' | 'w2';
 export type ApplicationStatus = 'new' | 'screening' | 'interviewed' | 'shortlisted' | 'rejected' | 'hired';
 export type CallDirection = 'outbound' | 'inbound';
-export type CallStatus = 'scheduled' | 'in_progress' | 'completed' | 'no_answer' | 'voicemail' | 'failed' | 'interrupted';
+export type CallStatus = 'scheduled' | 'in_progress' | 'completed' | 'no_answer' | 'voicemail' | 'failed' | 'interrupted' | 'cancelled';
 export type InterviewStyle = 'formal' | 'conversational' | 'technical';
 export type EvaluationDecision = 'advance' | 'reject' | 'callback' | 'hold';
 export type PhoneNumberType = 'inbound' | 'outbound' | 'both';
@@ -191,6 +191,7 @@ export interface Call {
   parent_call_id: string | null;
   context_passed: Record<string, unknown> | null;
   scheduled_at: string | null;
+  cal_booking_uid: string | null;
   created_at: string;
 }
 

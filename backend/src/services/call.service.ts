@@ -29,6 +29,7 @@ interface InitiateCallParams {
   userId: string | null; // null for system-triggered (e.g. auto-redial)
   scheduledAt?: string; // ISO timestamp for delayed calls
   existingCallId?: string; // reuse a pre-created (scheduled) call row instead of inserting a new one
+  calBookingUid?: string; // Cal.com booking uid (idempotency + reschedule/cancel matching)
 }
 
 /**
@@ -109,6 +110,7 @@ export async function initiateOutboundCall(params: InitiateCallParams): Promise<
         from_number: env.RETELL_FROM_NUMBER,
         to_number: formattedPhone,
         scheduled_at: params.scheduledAt || null,
+        cal_booking_uid: params.calBookingUid || null,
         context_passed: dynamicVars,
       })
       .select()

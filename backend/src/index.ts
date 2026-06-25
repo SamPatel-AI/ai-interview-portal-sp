@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { env } from './config/env';
 import { logger } from './utils/logger';
+import { runStartupChecks } from './config/startupChecks';
 import { errorHandler } from './middleware/errorHandler';
 import { apiLimiter } from './middleware/rateLimiter';
 
@@ -33,7 +34,9 @@ import './jobs/callRetry.job';
 import './jobs/callScheduler.job';
 import { pollScheduledCalls } from './jobs/callScheduler.job';
 import './jobs/ceipalSync.job';
+import { startRecurringCeipalSync } from './jobs/ceipalSync.job';
 import './jobs/resumeProcessor.job';
+import { startRecurringCeipalSubmissionsPoll } from './jobs/ceipalSubmissionsPoll.job';
 
 const app = express();
 
@@ -104,9 +107,23 @@ const PORT = parseInt(env.PORT, 10);
 app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT} in ${env.NODE_ENV} mode`);
 
+  // Loud config diagnostics (email transport, webhook auth, Cal.com API).
+  runStartupChecks();
+
   // Start background job schedulers
   startReengagementScheduler().catch(err => {
     logger.error('Failed to start re-engagement scheduler:', err);
+  });
+
+  // Sync CEIPAL jobs every 30 min for all orgs (keeps jobs + ceipal_job_uuid
+  // current so inbound submissions can match newly-posted jobs).
+  startRecurringCeipalSync().catch(err => {
+    logger.error('Failed to start CEIPAL job sync:', err);
+  });
+
+  // Poll CEIPAL for new candidate submissions (replaces the email/n8n intake).
+  startRecurringCeipalSubmissionsPoll().catch(err => {
+    logger.error('Failed to start CEIPAL submissions poll:', err);
   });
 
   // Promote due scheduled calls (cal.com bookings, post-call callbacks) into the
