@@ -56,3 +56,43 @@ export function requireWebhookSecret(req: Request, res: Response, next: NextFunc
 
   next();
 }
+
+// Cal.com signs webhook payloads as an HMAC-SHA256 hex digest of the raw body in
+// the `x-cal-signature-256` header, using the secret configured on the webhook.
+// We reuse WEBHOOK_SHARED_SECRET as that secret. A matching `x-webhook-secret`
+// header is also accepted as a fallback (manual/curl testing). If the env var is
+// unset, requests pass with a warning (dev-safe, matching requireWebhookSecret).
+export function verifyCalSignature(req: Request, res: Response, next: NextFunction): void {
+  const secret = env.WEBHOOK_SHARED_SECRET;
+  if (!secret) {
+    logger.warn('WEBHOOK_SHARED_SECRET not set — Cal.com webhook accepted without verification');
+    next();
+    return;
+  }
+
+  // Fallback: explicit shared-secret header.
+  const provided = req.headers['x-webhook-secret'];
+  if (
+    typeof provided === 'string' &&
+    provided.length === secret.length &&
+    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(secret))
+  ) {
+    next();
+    return;
+  }
+
+  // Primary: Cal.com HMAC-SHA256 signature over the raw request body.
+  const signature = req.headers['x-cal-signature-256'];
+  if (typeof signature === 'string') {
+    const expected = crypto.createHmac('sha256', secret).update(rawBodyString(req)).digest('hex');
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expected);
+    if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) {
+      next();
+      return;
+    }
+  }
+
+  logger.warn(`Rejected Cal.com webhook with missing/invalid signature (${req.path})`);
+  res.status(401).json({ error: 'Invalid Cal.com signature' });
+}

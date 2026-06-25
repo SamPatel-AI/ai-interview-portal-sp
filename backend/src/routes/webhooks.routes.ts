@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import { phonesMatch } from '../utils/phone';
 import { scheduleCallRetry } from '../jobs/callRetry.job';
 import { buildInboundContext } from '../utils/retellPromptBuilder';
-import { verifyRetellSignature, requireWebhookSecret } from '../middleware/webhookAuth';
+import { verifyRetellSignature, requireWebhookSecret, verifyCalSignature } from '../middleware/webhookAuth';
 import { cancelBooking } from '../services/cal.service';
 import { notifyBookingIssue } from '../services/notification.service';
 import { ingestCandidate } from '../services/intake.service';
@@ -143,7 +143,7 @@ const APP_SELECT = `
   jobs (id, title, interview_deadline, ai_agent_id, ai_agents (id, retell_agent_id))
 `;
 
-router.post('/cal-booking', requireWebhookSecret, async (req: Request, res: Response, _next: NextFunction) => {
+router.post('/cal-booking', verifyCalSignature, async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const body = typeof req.body === 'string'
       ? JSON.parse(req.body)
