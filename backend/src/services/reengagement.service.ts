@@ -3,19 +3,29 @@ import { logger } from '../utils/logger';
 import { batchScreenResumesLite } from './screening-lite.service';
 import { queueEmail } from '../jobs/emailSender.job';
 
+// Only jobs the client has touched this recently count as re-engageable.
+// CEIPAL leaves years-old reqs marked "Active", so status=open alone matches
+// ~1.7k historical jobs — recency (ceipal_modified_at, or created_at for
+// portal-created jobs) is what separates a live req from an abandoned one.
+const ACTIVE_JOB_WINDOW_DAYS = 30;
+
 /**
- * Find open jobs with zero applications in the last N days.
+ * Find recently-active open jobs with zero applications in the last N days.
  * These are "stale" jobs that need candidate re-engagement.
  */
 export async function findStaleJobs(orgId: string, staleDays: number = 3) {
   const cutoff = new Date(Date.now() - staleDays * 24 * 60 * 60 * 1000).toISOString();
+  const activeCutoff = new Date(
+    Date.now() - ACTIVE_JOB_WINDOW_DAYS * 24 * 60 * 60 * 1000
+  ).toISOString();
 
-  // Get open jobs
+  // Get open jobs still active within the window
   const { data: openJobs, error } = await supabaseAdmin
     .from('jobs')
     .select('id, title, description, skills, client_company_id')
     .eq('org_id', orgId)
-    .eq('status', 'open');
+    .eq('status', 'open')
+    .or(`ceipal_modified_at.gte.${activeCutoff},and(ceipal_modified_at.is.null,created_at.gte.${activeCutoff})`);
 
   if (error || !openJobs?.length) return [];
 
