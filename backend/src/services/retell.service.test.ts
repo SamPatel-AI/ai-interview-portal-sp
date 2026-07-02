@@ -142,3 +142,47 @@ describe('fetchRetellAgentsForImport', () => {
     });
   });
 });
+
+describe('syncAgentToRetell — voice naturalness', () => {
+  const guidedConfig = {
+    interviewer_persona: 'Grace, a warm recruiter', company_blurb: '', tone: 'conversational',
+    phases: {
+      rapport: { enabled: true, guidance: '' }, screening: { enabled: true, guidance: '' },
+      deep_dive: { enabled: true, guidance: '' }, candidate_qa: { enabled: true, guidance: '' },
+      closing: { enabled: true, guidance: '' },
+    },
+    dos: [], donts: [], greeting: '', closing: '',
+  };
+
+  it('sends a begin_message for guided agents (default identity-check opener)', async () => {
+    await syncAgentToRetell({ ...baseAgent, builder_config: guidedConfig }, 'http://hook');
+    expect(llm.create).toHaveBeenCalledWith(expect.objectContaining({
+      begin_message: 'Hi, am I speaking with {{candidate_first_name}}?',
+    }));
+  });
+
+  it('uses the configured greeting verbatim as begin_message', async () => {
+    const cfg = { ...guidedConfig, greeting: 'Hi, this is Grace from {{company_name}} — is this {{candidate_first_name}}?' };
+    await syncAgentToRetell({ ...baseAgent, builder_config: cfg }, 'http://hook');
+    expect(llm.create).toHaveBeenCalledWith(expect.objectContaining({
+      begin_message: 'Hi, this is Grace from {{company_name}} — is this {{candidate_first_name}}?',
+    }));
+  });
+
+  it('does NOT send begin_message for raw-prompt agents', async () => {
+    await syncAgentToRetell(baseAgent, 'http://hook');
+    expect(llm.create).toHaveBeenCalledWith(expect.not.objectContaining({ begin_message: expect.anything() }));
+  });
+
+  it('enables backchanneling and silence reminders on both create and update', async () => {
+    await syncAgentToRetell(baseAgent, 'http://hook');
+    expect(agent.create).toHaveBeenCalledWith(expect.objectContaining({
+      enable_backchannel: true, reminder_trigger_ms: 10000, reminder_max_count: 2,
+    }));
+    vi.clearAllMocks();
+    llm.update.mockResolvedValue({});
+    agent.update.mockResolvedValue({});
+    await syncAgentToRetell({ ...baseAgent, retell_llm_id: 'llm_x', retell_agent_id: 'agent_x' }, 'http://hook');
+    expect(agent.update).toHaveBeenCalledWith('agent_x', expect.objectContaining({ enable_backchannel: true }));
+  });
+});
