@@ -89,7 +89,10 @@ export async function queueEmail(params: {
     `email-${params.type}-${params.candidateId}`,
     params,
     {
-      jobId: `email-${params.type}-${params.applicationId}`, // Prevent duplicate emails
+      // Dedup key. Fall back to candidateId when there's no application yet
+      // (re-engagement): with the empty-string applicationId every campaign
+      // email shared ONE jobId, so BullMQ deduped all but the first away.
+      jobId: `email-${params.type}-${params.applicationId || params.candidateId}`,
     }
   );
 }

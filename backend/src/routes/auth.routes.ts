@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../config/database';
+import { env } from '../config/env';
 import { authenticate } from '../middleware/auth';
 import { authLimiter } from '../middleware/rateLimiter';
 import { AppError } from '../middleware/errorHandler';
@@ -16,7 +17,6 @@ const signupSchema = z.object({
   password: z.string().min(8),
   full_name: z.string().min(1),
   org_name: z.string().min(1).optional(), // If creating a new org
-  org_id: z.string().uuid().optional(),   // If joining existing org
 });
 
 const loginSchema = z.object({
@@ -28,6 +28,13 @@ const loginSchema = z.object({
 
 router.post('/signup', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Self-service signup is a provisioning tool, not a public feature: it
+    // creates a live, email-confirmed account. Off unless explicitly enabled.
+    // Org members are added by an admin via POST /api/users/invite.
+    if (env.ALLOW_PUBLIC_SIGNUP !== 'true') {
+      throw new AppError(403, 'Signup is invite-only. Ask your administrator for an invitation.');
+    }
+
     const body = signupSchema.parse(req.body);
 
     // Create Supabase auth user
@@ -43,38 +50,23 @@ router.post('/signup', authLimiter, async (req: Request, res: Response, next: Ne
 
     const userId = authData.user.id;
 
-    // Create or join organization
-    let orgId: string;
+    // Signup always creates a NEW org with the signer as its admin. Joining an
+    // EXISTING org is never self-service (that let anyone with an org UUID add
+    // themselves as a recruiter) — members are invited via /api/users/invite.
+    const orgName = body.org_name || `${body.full_name}'s Organization`;
+    const { data: org, error } = await supabaseAdmin
+      .from('organizations')
+      .insert({ name: orgName })
+      .select('id')
+      .single();
 
-    if (body.org_id) {
-      // Joining existing org
-      const { data: org, error } = await supabaseAdmin
-        .from('organizations')
-        .select('id')
-        .eq('id', body.org_id)
-        .single();
-
-      if (error || !org) {
-        throw new AppError(404, 'Organization not found');
-      }
-      orgId = org.id;
-    } else {
-      // Create new org
-      const orgName = body.org_name || `${body.full_name}'s Organization`;
-      const { data: org, error } = await supabaseAdmin
-        .from('organizations')
-        .insert({ name: orgName })
-        .select('id')
-        .single();
-
-      if (error || !org) {
-        throw new AppError(500, 'Failed to create organization');
-      }
-      orgId = org.id;
+    if (error || !org) {
+      throw new AppError(500, 'Failed to create organization');
     }
+    const orgId = org.id;
 
     // Create user profile
-    const role = body.org_id ? 'recruiter' : 'admin'; // First user is admin
+    const role = 'admin'; // First user of a new org is its admin
     const { error: profileError } = await supabaseAdmin
       .from('users')
       .insert({
