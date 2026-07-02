@@ -50,6 +50,10 @@ const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().default(''),
   OPENROUTER_MODEL: z.string().default('openai/gpt-4o-mini'),
 
+  // Self-service signup (creates a new org + admin account, email
+  // pre-confirmed). Keep OFF in production — members join via admin invite.
+  ALLOW_PUBLIC_SIGNUP: z.enum(['true', 'false']).default('false'),
+
   MS_GRAPH_CLIENT_ID: z.string().optional(),
   MS_GRAPH_CLIENT_SECRET: z.string().optional(),
   MS_GRAPH_TENANT_ID: z.string().optional(),

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import multer from 'multer';
 import { supabaseAdmin } from '../config/database';
+import { authenticate, requireRole } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
@@ -35,12 +36,23 @@ async function portalAuth(req: Request, _res: Response, next: NextFunction) {
 }
 
 // ─── POST /api/portal/generate-token ───────────────────────
-// (Called by backend internally or admin — generates portal access for a candidate)
+// Staff-only: a portal token grants the holder that candidate's PII and
+// resume-overwrite access, so minting one must never be anonymous, and only
+// for a candidate in the caller's own org.
 
-router.post('/generate-token', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/generate-token', authenticate, requireRole('admin', 'recruiter'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { candidate_id, expires_hours = 72 } = req.body;
     if (!candidate_id) throw new AppError(400, 'candidate_id required');
+
+    const { data: candidate, error: candidateError } = await supabaseAdmin
+      .from('candidates')
+      .select('id')
+      .eq('id', candidate_id)
+      .eq('org_id', req.user!.org_id)
+      .single();
+
+    if (candidateError || !candidate) throw new AppError(404, 'Candidate not found');
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + expires_hours * 60 * 60 * 1000);
