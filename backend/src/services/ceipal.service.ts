@@ -16,45 +16,13 @@ interface CeipalJob {
   tax_terms: string;
   job_code: string;
   company?: number | string;
+  /** Comma-separated encoded CEIPAL user ids the job is assigned to. */
+  assigned_recruiter?: string;
   employment_type?: string;
   job_status?: string;
   modified?: string;
   created?: string;
   pay_rates?: Array<{ pay_rate_currency?: string; pay_rate?: string; min_pay_rate?: string; max_pay_rate?: string }>;
-}
-
-/** A CEIPAL submission = a candidate applied to a job posting (getSubmissionsList). */
-export interface CeipalSubmission {
-  submission_id: number;
-  id?: string;
-  applicant_id?: number;
-  job_id?: string; // opaque CEIPAL job-posting id → jobs.ceipal_job_uuid
-  submitted_on?: string;
-  modified?: string;
-  submission_status?: string;
-  source?: string;
-  tax_term?: string;
-  employment_type?: string;
-  resume?: string | null; // signed download URL (no auth needed)
-  merged_pdf_document?: string | null;
-  merge_document_path?: string | null;
-  Documents?: unknown[];
-}
-
-/** Applicant contact details (getApplicantDetails?applicant_id=<numeric>). */
-export interface CeipalApplicantDetails {
-  applicant_id?: number;
-  firstname?: string;
-  lastname?: string;
-  email?: string;
-  email_address_1?: string;
-  mobile_number?: string;
-  other_phone?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  work_authorization?: string;
-  source?: string;
 }
 
 function mapEmploymentType(v?: string): 'full_time' | 'contract' | 'c2c' | 'w2' {
@@ -443,6 +411,8 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
       ceipal_company_id: cJob.company != null ? String(cJob.company) : null,
       // Opaque CEIPAL posting id — lets a submission's job_id map directly to this job.
       ceipal_job_uuid: cJob.id || null,
+      // Assigned-recruiter ids — the mail-intake gate checks our recruiter is on the job.
+      ceipal_assigned_recruiters: cJob.assigned_recruiter || null,
       client_company_id: resolvedClientId,
       ceipal_modified_at: modifiedAt,
       synced_at: new Date().toISOString(),
@@ -493,78 +463,7 @@ export async function fetchCeipalJob(jobCode: string): Promise<CeipalJob | null>
   return jobs.length > 0 ? jobs[0] : null;
 }
 
-// ─── Submissions (candidate intake) ────────────────────────
-
-/**
- * Fetch ALL submissions from CEIPAL (getSubmissionsList, paginated). CEIPAL has
- * no working server-side date filter on this endpoint, so we pull every page
- * (the set is small — hundreds of rows) and the caller dedupes against the
- * `ceipal_submissions` ledger before doing any expensive per-submission work.
- */
-export async function fetchAllCeipalSubmissions(token: string): Promise<CeipalSubmission[]> {
-  const all: CeipalSubmission[] = [];
-  let page = 1;
-  let numPages = 1;
-  do {
-    const url = new URL('https://api.ceipal.com/v1/getSubmissionsList');
-    url.searchParams.set('page', String(page));
-    const response = await ceipalGet(url.toString(), token);
-    if (!response.ok) throw new Error(`CEIPAL submissions fetch failed: ${response.status}`);
-    const data = (await response.json()) as { results?: CeipalSubmission[]; num_pages?: number };
-    all.push(...(data.results || []));
-    numPages = data.num_pages || 1;
-    page += 1;
-  } while (page <= numPages && page <= 200); // generous runaway guard (~29 pages today)
-  return all;
-}
-
-/**
- * Fetch a single applicant's contact details (the submission itself carries no
- * name/email/phone — those live on the applicant record).
- */
-export async function fetchCeipalApplicantDetails(
-  token: string,
-  applicantId: number | string,
-): Promise<CeipalApplicantDetails | null> {
-  const url = `https://api.ceipal.com/v1/getApplicantDetails?applicant_id=${encodeURIComponent(String(applicantId))}`;
-  const response = await ceipalGet(url, token);
-  if (!response.ok) return null;
-  const data = (await response.json()) as
-    | { results?: CeipalApplicantDetails[] }
-    | CeipalApplicantDetails;
-  const rec = Array.isArray((data as { results?: CeipalApplicantDetails[] }).results)
-    ? (data as { results: CeipalApplicantDetails[] }).results[0]
-    : (data as CeipalApplicantDetails);
-  // The endpoint returns a {status,success,message} envelope on miss — treat as null.
-  return rec && (rec.firstname || rec.lastname || rec.email) ? rec : null;
-}
-
-/**
- * Download a résumé from a CEIPAL signed document URL (submission.resume etc.).
- * These URLs are signed and need no auth token. Returns bytes + a filename
- * (with a usable extension so downstream MIME detection works).
- */
-export async function downloadCeipalResume(
-  fileUrl: string,
-): Promise<{ buffer: Buffer; filename: string; mimeType: string }> {
-  const res = await fetch(fileUrl);
-  if (!res.ok) throw new Error(`CEIPAL résumé download failed: ${res.status}`);
-  const mimeType = res.headers.get('content-type') || 'application/octet-stream';
-  const disposition = res.headers.get('content-disposition') || '';
-  const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^"";]+)"?/i);
-  let filename = match ? decodeURIComponent(match[1]) : '';
-  filename = filename.replace(/[/\\]/g, '_').trim();
-  if (!filename) filename = 'resume';
-  // Ensure an extension so resume.service can map the MIME type from the path.
-  if (!/\.[a-z0-9]{2,5}$/i.test(filename)) {
-    const extByMime: Record<string, string> = {
-      'application/pdf': '.pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
-      'application/msword': '.doc',
-      'text/plain': '.txt',
-    };
-    filename += extByMime[mimeType.split(';')[0].trim()] || '.pdf';
-  }
-  const buffer = Buffer.from(await res.arrayBuffer());
-  return { buffer, filename, mimeType };
-}
+// (The former getSubmissionsList/getApplicantDetails intake helpers were
+// removed with the retired ceipalSubmissionsPoll job: that API surface is a
+// frozen data set with no job code or candidate identity. Candidate intake now
+// reads CEIPAL notification emails via Graph — see jobs/ceipalMailPoll.job.ts.)

@@ -36,7 +36,7 @@ import { pollScheduledCalls } from './jobs/callScheduler.job';
 import './jobs/ceipalSync.job';
 import { startRecurringCeipalSync } from './jobs/ceipalSync.job';
 import './jobs/resumeProcessor.job';
-import { startRecurringCeipalSubmissionsPoll } from './jobs/ceipalSubmissionsPoll.job';
+import { startRecurringCeipalMailPoll } from './jobs/ceipalMailPoll.job';
 
 const app = express();
 
@@ -121,9 +121,10 @@ app.listen(PORT, () => {
     logger.error('Failed to start CEIPAL job sync:', err);
   });
 
-  // Poll CEIPAL for new candidate submissions (replaces the email/n8n intake).
-  startRecurringCeipalSubmissionsPoll().catch(err => {
-    logger.error('Failed to start CEIPAL submissions poll:', err);
+  // Poll the AISaanviHR inbox for CEIPAL notification emails (candidate
+  // intake — the CEIPAL API itself exposes no job-board applications).
+  startRecurringCeipalMailPoll().catch(err => {
+    logger.error('Failed to start CEIPAL mail poll:', err);
   });
 
   // Promote due scheduled calls (cal.com bookings, post-call callbacks) into the
