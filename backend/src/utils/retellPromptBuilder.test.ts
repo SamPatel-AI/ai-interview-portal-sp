@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileSystemPrompt, buildSampleVariables, buildDynamicVariables, buildInboundContext } from './retellPromptBuilder';
+import { compileSystemPrompt, compileBeginMessage, buildSampleVariables, buildDynamicVariables, buildInboundContext } from './retellPromptBuilder';
 import type { BuilderConfig } from '../types';
 
 const fullConfig: BuilderConfig = {
@@ -112,5 +112,26 @@ describe('buildInboundContext company_name', () => {
   it('uses the provided company name', () => {
     const vars = buildInboundContext({ candidate: { first_name: 'A', last_name: 'B', email: 'a@b.com' }, job: { title: 'Dev', company_name: 'Acme' } } as any);
     expect(vars.company_name).toBe('Acme');
+  });
+});
+
+describe('compileSystemPrompt — voice best practices', () => {
+  it('includes spoken-conversation style rules and scenario handling', () => {
+    const prompt = compileSystemPrompt(fullConfig);
+    expect(prompt).toContain('one or two sentences');
+    expect(prompt).toContain('ONE question at a time');
+    expect(prompt).toContain('could you say that again');
+    expect(prompt).toContain('resumed or returned call');
+    expect(prompt).toContain('never make or imply hiring decisions');
+  });
+});
+
+describe('compileBeginMessage', () => {
+  it('defaults to an identity-check opener', () => {
+    expect(compileBeginMessage(fullConfig)).toBe('Hi, am I speaking with {{candidate_first_name}}?');
+  });
+  it('uses a configured greeting verbatim', () => {
+    const cfg = { ...fullConfig, greeting: '  Hi, this is Grace from Saanvi — is this {{candidate_first_name}}?  ' };
+    expect(compileBeginMessage(cfg)).toBe('Hi, this is Grace from Saanvi — is this {{candidate_first_name}}?');
   });
 });

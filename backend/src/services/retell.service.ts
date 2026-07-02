@@ -2,7 +2,7 @@ import { retellClient } from '../config/retell';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { AIAgent, SyncStatus } from '../types';
-import { compileSystemPrompt } from '../utils/retellPromptBuilder';
+import { compileSystemPrompt, compileBeginMessage } from '../utils/retellPromptBuilder';
 
 // ─── Shared Constants ──────────────────────────────────────
 
@@ -135,13 +135,32 @@ export async function syncAgentToRetell(agent: SyncableAgent, webhookUrl: string
     const generalPrompt = agent.builder_config
       ? compileSystemPrompt(agent.builder_config)
       : agent.system_prompt;
+    // A fixed first utterance — deterministic greetings, no improvised
+    // "[Your Name]" openers. Only guided agents get one; raw-prompt agents
+    // keep Retell's default (model-generated) opener.
+    const llmPayload: Record<string, unknown> = { general_prompt: generalPrompt };
+    if (agent.builder_config) {
+      llmPayload.begin_message = compileBeginMessage(agent.builder_config);
+    }
 
     if (!llmId) {
-      const created = await retellClient.llm.create({ general_prompt: generalPrompt } as any);
+      const created = await retellClient.llm.create(llmPayload as any);
       llmId = created.llm_id;
     } else {
-      await retellClient.llm.update(llmId, { general_prompt: generalPrompt } as any);
+      await retellClient.llm.update(llmId, llmPayload as any);
     }
+
+    // Conversation-naturalness settings (same for create and update):
+    // backchannels ("mm-hm", "right") while the candidate speaks, and a gentle
+    // nudge after 10s of silence instead of dead air. Everything else stays at
+    // Retell defaults, which are already tuned for live conversation.
+    const naturalness = {
+      enable_backchannel: true,
+      backchannel_frequency: 0.7,
+      backchannel_words: ['mm-hm', 'uh-huh', 'I see', 'right', 'got it'],
+      reminder_trigger_ms: 10000,
+      reminder_max_count: 2,
+    };
 
     if (!agentId) {
       const created = await retellClient.agent.create({
@@ -153,6 +172,7 @@ export async function syncAgentToRetell(agent: SyncableAgent, webhookUrl: string
         post_call_analysis_data: POST_CALL_ANALYSIS_DATA as any,
         webhook_url: webhookUrl,
         voicemail_option: { action: { type: 'hangup' } } as any,
+        ...naturalness,
       } as any);
       agentId = created.agent_id;
     } else {
@@ -169,6 +189,7 @@ export async function syncAgentToRetell(agent: SyncableAgent, webhookUrl: string
         webhook_url: webhookUrl,
         post_call_analysis_data: POST_CALL_ANALYSIS_DATA as any,
         voicemail_option: { action: { type: 'hangup' } } as any,
+        ...naturalness,
       } as any);
     }
 
