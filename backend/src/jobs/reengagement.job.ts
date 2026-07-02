@@ -1,8 +1,12 @@
 import { Queue, Worker } from 'bullmq';
 import { redis } from '../config/redis';
 import { supabaseAdmin } from '../config/database';
+import { env } from '../config/env';
 import { findStaleJobs, launchCampaign } from '../services/reengagement.service';
 import { logger } from '../utils/logger';
+
+// Don't relaunch a campaign for a job that had one (any status) this recently.
+const CAMPAIGN_COOLDOWN_DAYS = 7;
 
 // ─── Queue Definition ──────────────────────────────────────
 
@@ -45,17 +49,23 @@ export const reengagementWorker = new Worker(
         logger.info(`Org ${org.name}: found ${staleJobs.length} stale jobs, launching campaigns`);
 
         for (const staleJob of staleJobs) {
-          // Check if there's already an active campaign for this job
+          // Cooldown: skip if ANY campaign (whatever its status) ran for this
+          // job recently. Checking only in-progress statuses let completed
+          // campaigns relaunch every sweep — with ~1.7k CEIPAL "open" jobs
+          // that minted thousands of junk campaigns per day.
+          const cooldownCutoff = new Date(
+            Date.now() - CAMPAIGN_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+          ).toISOString();
           const { data: existing } = await supabaseAdmin
             .from('reengagement_campaigns')
             .select('id')
             .eq('job_id', staleJob.id)
-            .in('status', ['pending', 'matching', 'emailing'])
+            .gte('created_at', cooldownCutoff)
             .limit(1)
             .single();
 
           if (existing) {
-            logger.info(`Skipping job ${staleJob.title}: campaign already in progress`);
+            logger.info(`Skipping job ${staleJob.title}: campaign within ${CAMPAIGN_COOLDOWN_DAYS}-day cooldown`);
             continue;
           }
 
@@ -78,9 +88,27 @@ reengagementWorker.on('failed', (job, err) => {
 
 /**
  * Set up the recurring re-engagement check (every 6 hours).
+ *
+ * OFF unless REENGAGEMENT_AUTO_SWEEP=true: the sweep sends real emails to
+ * candidates on its own, so it must be an explicit opt-in. When disabled we
+ * also REMOVE any previously-registered repeatable job — BullMQ repeatables
+ * persist in Redis, so merely not re-adding one would leave the old schedule
+ * firing forever. Manual per-job campaigns (POST /api/reengagement/trigger)
+ * are unaffected by this flag.
  */
 export async function startReengagementScheduler(): Promise<void> {
-  // Add recurring job
+  if (env.REENGAGEMENT_AUTO_SWEEP !== 'true') {
+    const repeatables = await reengagementQueue.getRepeatableJobs();
+    for (const r of repeatables) {
+      await reengagementQueue.removeRepeatableByKey(r.key);
+    }
+    logger.info(
+      `Re-engagement auto-sweep DISABLED (REENGAGEMENT_AUTO_SWEEP != true)` +
+      (repeatables.length ? ` — removed ${repeatables.length} stale recurring job(s)` : '')
+    );
+    return;
+  }
+
   await reengagementQueue.add(
     'reengagement-check',
     {},
