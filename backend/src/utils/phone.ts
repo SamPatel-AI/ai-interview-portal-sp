@@ -22,13 +22,6 @@ export function formatPhoneE164(raw: string): string {
 }
 
 /**
- * Validate that a string looks like a valid E.164 phone number.
- */
-export function isValidE164(phone: string): boolean {
-  return /^\+[1-9]\d{6,14}$/.test(phone);
-}
-
-/**
  * Strip a phone string down to its last 10 digits for comparison.
  * Works regardless of formatting, country code prefix, etc.
  */

@@ -75,38 +75,6 @@ export async function createOutboundCall(params: CreateCallParams): Promise<{
   }
 }
 
-// ─── Phone Number Management ───────────────────────────────
-
-interface RegisterPhoneParams {
-  areaCode?: number;
-  inboundAgentId?: string;
-  inboundWebhookUrl?: string;
-}
-
-export async function registerPhoneNumber(params: RegisterPhoneParams) {
-  try {
-    const phone = await retellClient.phoneNumber.create({
-      area_code: params.areaCode || 240,
-      inbound_agent_id: params.inboundAgentId,
-    });
-
-    logger.info(`Registered phone number: ${phone.phone_number}`);
-    return phone;
-  } catch (err) {
-    logger.error('Failed to register phone number:', err);
-    throw err;
-  }
-}
-
-export async function listPhoneNumbers() {
-  try {
-    return await retellClient.phoneNumber.list();
-  } catch (err) {
-    logger.error('Failed to list phone numbers:', err);
-    throw err;
-  }
-}
-
 // ─── Retell Sync ────────────────────────────────────────────
 
 export interface SyncResult {

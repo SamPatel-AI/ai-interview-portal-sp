@@ -13,19 +13,3 @@ export const supabaseAdmin: SupabaseClient = createClient(
   }
 );
 
-// Anon client - respects RLS, used for user-scoped queries
-export const supabaseAnon: SupabaseClient = createClient(
-  env.SUPABASE_URL,
-  env.SUPABASE_ANON_KEY
-);
-
-// Create a client scoped to a specific user's JWT (for RLS)
-export function createUserClient(accessToken: string): SupabaseClient {
-  return createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-  });
-}

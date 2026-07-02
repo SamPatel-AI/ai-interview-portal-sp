@@ -20,10 +20,6 @@ function calHeaders(apiVersion?: string): Record<string, string> {
   };
 }
 
-export function isCalConfigured(): boolean {
-  return !!env.CAL_API_KEY;
-}
-
 /**
  * Cancel a Cal.com booking by its uid. Returns true on success.
  * No-ops (returns false) when CAL_API_KEY is not configured.

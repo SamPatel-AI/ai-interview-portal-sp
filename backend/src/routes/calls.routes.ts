@@ -232,8 +232,7 @@ router.post(
     try {
       const call = await resumeInterruptedCall(
         req.params.id as string,
-        req.user!.org_id,
-        req.user!.id
+        req.user!.org_id
       );
 
       res.status(201).json({ success: true, data: call });
