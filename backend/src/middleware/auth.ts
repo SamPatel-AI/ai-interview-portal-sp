@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/database';
-import { AuthUser, UserRole } from '../types';
+import { UserRole } from '../types';
 import { AppError } from './errorHandler';
 
 /**
@@ -73,15 +73,4 @@ export function requireRole(...allowedRoles: UserRole[]) {
     }
     next();
   };
-}
-
-/**
- * Ensure the user can only access resources within their organization.
- * Attaches org_id filter to the request for downstream use.
- */
-export function orgScope(req: Request, _res: Response, next: NextFunction) {
-  if (!req.user?.org_id) {
-    return next(new AppError(401, 'Not authenticated'));
-  }
-  next();
 }

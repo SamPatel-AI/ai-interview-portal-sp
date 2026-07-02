@@ -454,15 +454,6 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
   return { synced: ceipalJobs.length, created, updated, clients: clientCount, linked, skipped };
 }
 
-/**
- * Fetch a single job from CEIPAL by job code.
- */
-export async function fetchCeipalJob(jobCode: string): Promise<CeipalJob | null> {
-  const token = await getCeipalToken();
-  const jobs = await fetchCeipalJobs(token, `JPC - ${jobCode}`);
-  return jobs.length > 0 ? jobs[0] : null;
-}
-
 // (The former getSubmissionsList/getApplicantDetails intake helpers were
 // removed with the retired ceipalSubmissionsPoll job: that API surface is a
 // frozen data set with no job code or candidate identity. Candidate intake now

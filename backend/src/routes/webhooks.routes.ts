@@ -509,7 +509,7 @@ router.post('/cal-booking', verifyCalSignature, async (req: Request, res: Respon
 // ─── POST /api/webhooks/retell/post-call ───────────────────
 // Retell fires this after a call ends with analysis
 
-router.post('/retell/post-call', verifyRetellSignature, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/retell/post-call', verifyRetellSignature, async (req: Request, res: Response, _next: NextFunction) => {
   try {
     // Parse raw body (mounted before JSON parser in index.ts)
     const body = typeof req.body === 'string'

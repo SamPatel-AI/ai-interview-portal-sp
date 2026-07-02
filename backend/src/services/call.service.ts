@@ -185,8 +185,7 @@ export async function initiateOutboundCall(params: InitiateCallParams): Promise<
  */
 export async function resumeInterruptedCall(
   interruptedCallId: string,
-  orgId: string,
-  userId: string
+  orgId: string
 ): Promise<Call> {
   // Fetch the interrupted call
   const { data: prevCall, error } = await supabaseAdmin

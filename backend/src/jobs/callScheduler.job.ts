@@ -1,4 +1,4 @@
-import { Queue, Worker, QueueEvents } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import { redis } from '../config/redis';
 import { supabaseAdmin } from '../config/database';
 import { initiateOutboundCall } from '../services/call.service';

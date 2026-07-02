@@ -1,6 +1,5 @@
 import { Queue, Worker } from 'bullmq';
 import { redis } from '../config/redis';
-import { supabaseAdmin } from '../config/database';
 import { initiateOutboundCall, resumeInterruptedCall } from '../services/call.service';
 import { logger } from '../utils/logger';
 
@@ -31,7 +30,7 @@ export const callRetryWorker = new Worker(
         await initiateOutboundCall({ applicationId, orgId, userId: null });
       } else {
         // Interrupted call → resume where it left off.
-        await resumeInterruptedCall(callId, orgId, 'system');
+        await resumeInterruptedCall(callId, orgId);
       }
       logger.info(`Call retry successful (reason: ${reason})`);
     } catch (err) {
@@ -90,26 +89,4 @@ export async function scheduleCallRedial(
   );
 
   logger.info(`Scheduled auto-redial for application ${applicationId} (attempt ${attempt}) in ${delayMs / 1000}s`);
-}
-
-/**
- * Schedule a callback at a specific time (candidate requested).
- */
-export async function scheduleCallback(
-  callId: string,
-  orgId: string,
-  callbackAt: Date
-): Promise<void> {
-  const delay = Math.max(0, callbackAt.getTime() - Date.now());
-
-  await callRetryQueue.add(
-    `callback-${callId}`,
-    { callId, orgId, reason: 'candidate_requested_callback' },
-    {
-      delay,
-      jobId: `callback-${callId}`,
-    }
-  );
-
-  logger.info(`Scheduled callback for call ${callId} at ${callbackAt.toISOString()}`);
 }

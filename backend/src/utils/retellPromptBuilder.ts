@@ -175,20 +175,6 @@ export function buildInboundContext(ctx: InboundContext): Record<string, string>
 }
 
 /**
- * Build the system prompt for a Retell agent based on agent config.
- * Replaces template variables like {{candidate_name}}, {{job_title}}, etc.
- */
-export function buildSystemPrompt(agent: AIAgent, variables: Record<string, string>): string {
-  let prompt = agent.system_prompt;
-
-  for (const [key, value] of Object.entries(variables)) {
-    prompt = prompt.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
-  }
-
-  return prompt;
-}
-
-/**
  * Compile a guided-builder config's greeting into the Retell LLM
  * `begin_message` — the agent's EXACT first utterance on every call. A fixed
  * opener kills improvised greetings (the "[Your Name]" bug) and works for all

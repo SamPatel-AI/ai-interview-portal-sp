@@ -8,14 +8,11 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
   SUPABASE_URL: z.string().url(),
-  SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  SUPABASE_JWT_SECRET: z.string().min(1),
 
   REDIS_URL: z.string().default('redis://localhost:6379'),
 
   RETELL_API_KEY: z.string().default(''),
-  RETELL_WEBHOOK_SECRET: z.string().optional(),
   RETELL_FROM_NUMBER: z.string().default('+10000000000'),
 
   // Shared secret required (when set) on candidate-intake and cal-booking webhooks
@@ -53,7 +50,6 @@ const envSchema = z.object({
   MS_GRAPH_CLIENT_ID: z.string().optional(),
   MS_GRAPH_CLIENT_SECRET: z.string().optional(),
   MS_GRAPH_TENANT_ID: z.string().optional(),
-  MS_GRAPH_REDIRECT_URI: z.string().optional(),
   // Mailbox (UPN) that Graph sends from, e.g. AISaanviHR@saanvi.us
   MS_GRAPH_SENDER: z.string().optional(),
 

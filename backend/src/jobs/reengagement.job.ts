@@ -20,7 +20,7 @@ export const reengagementQueue = new Queue('reengagement-checker', {
 
 export const reengagementWorker = new Worker(
   'reengagement-checker',
-  async (job) => {
+  async () => {
     logger.info('Running re-engagement check...');
 
     // Get all organizations
@@ -91,15 +91,4 @@ export async function startReengagementScheduler(): Promise<void> {
   );
 
   logger.info('Re-engagement scheduler started (every 6 hours)');
-}
-
-/**
- * Manually trigger re-engagement for a specific org + job.
- */
-export async function triggerReengagement(orgId: string, jobId: string): Promise<void> {
-  await reengagementQueue.add(
-    `reengagement-manual-${jobId}`,
-    { orgId, jobId, manual: true },
-    { jobId: `reengagement-manual-${jobId}` }
-  );
 }
