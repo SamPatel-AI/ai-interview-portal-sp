@@ -46,20 +46,20 @@ export function runStartupChecks(): void {
     );
   }
 
-  // ── CEIPAL submissions intake (candidate poller) ─────────
-  if (!env.CEIPAL_API_KEY || !env.CEIPAL_EMAIL || !env.CEIPAL_PASSWORD) {
+  // ── CEIPAL mail intake (candidate poller via Graph) ──────
+  if (!env.MS_GRAPH_TENANT_ID || !env.MS_GRAPH_CLIENT_ID || !env.MS_GRAPH_CLIENT_SECRET || !env.MS_GRAPH_SENDER) {
     logger.warn(
-      'CEIPAL credentials incomplete (CEIPAL_API_KEY/EMAIL/PASSWORD) — the CEIPAL submissions ' +
-      'poller (candidate intake) will NOT run. Set them in backend/.env.',
+      'MS_GRAPH_* config incomplete — the CEIPAL mail poller (candidate intake) will NOT run. ' +
+      'Set MS_GRAPH_TENANT_ID/CLIENT_ID/CLIENT_SECRET/SENDER in backend/.env.',
     );
   } else if (!env.DEFAULT_ORG_ID) {
     logger.warn(
-      '⚠️  DEFAULT_ORG_ID is not set — the CEIPAL submissions poller cannot resolve an org and ' +
+      '⚠️  DEFAULT_ORG_ID is not set — the CEIPAL mail poller cannot resolve an org and ' +
       'will NOT run. Set it to the Saanvi org id in backend/.env.',
     );
   } else {
     logger.info(
-      `CEIPAL submissions intake: polling every ${env.CEIPAL_SUBMISSIONS_POLL_MINUTES}m for org ${env.DEFAULT_ORG_ID}`,
+      `CEIPAL mail intake: polling ${env.MS_GRAPH_SENDER} every ${env.CEIPAL_MAIL_POLL_MINUTES}m for org ${env.DEFAULT_ORG_ID}`,
     );
   }
 

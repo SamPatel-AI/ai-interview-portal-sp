@@ -34,8 +34,14 @@ const envSchema = z.object({
   CEIPAL_API_KEY: z.string().default(''),
   CEIPAL_EMAIL: z.string().default(''),
   CEIPAL_PASSWORD: z.string().default(''),
-  // How often to poll CEIPAL for new candidate submissions (minutes).
-  CEIPAL_SUBMISSIONS_POLL_MINUTES: z.string().default('15'),
+  // Graph mail intake: how often to poll the AISaanviHR inbox for CEIPAL
+  // notification emails (minutes) and how far back each poll looks (days —
+  // generous on purpose; the ceipal_submissions ledger dedupes).
+  CEIPAL_MAIL_POLL_MINUTES: z.string().default('5'),
+  CEIPAL_MAIL_LOOKBACK_DAYS: z.string().default('3'),
+  // Encoded CEIPAL user id whose assigned jobs are in-scope for email intake
+  // (Sam Patel / AISaanviHR@saanvi.us — resolved once via getUsersList).
+  CEIPAL_RECRUITER_ID: z.string().default('z5G7h3l6a1kMvyS65NP3c9XXNG0FW3dPbRUaKR83guY='),
 
   // Default org for server-side (non-authenticated) flows — single CEIPAL
   // account maps to one org. Used by the CEIPAL submissions poller.

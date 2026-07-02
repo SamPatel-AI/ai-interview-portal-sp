@@ -35,7 +35,7 @@ function getTransporter(): nodemailer.Transporter | null {
 let graphToken: { value: string; expiresAt: number } | null = null;
 
 /** Fetch (and cache) an app-only Graph access token via client credentials. */
-async function getGraphToken(): Promise<string> {
+export async function getGraphToken(): Promise<string> {
   if (graphToken && graphToken.expiresAt > Date.now() + 60_000) {
     return graphToken.value;
   }
