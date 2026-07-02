@@ -43,11 +43,16 @@ cur = datetime(2026, 6, 14, tzinfo=timezone.utc)
 end = datetime(2026, 7, 3, tzinfo=timezone.utc)
 window = timedelta(hours=6)
 
+def ts(dt):
+    # PostgREST query values must not contain a raw '+' (decodes to a space) —
+    # use the Z suffix instead of +00:00.
+    return dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+
 deleted_windows = 0
 while cur < end:
     hi = min(cur + window, end)
-    path = (f"reengagement_campaigns?created_at=gte.{cur.isoformat()}"
-            f"&created_at=lt.{hi.isoformat()}")
+    path = (f"reengagement_campaigns?created_at=gte.{ts(cur)}"
+            f"&created_at=lt.{ts(hi)}")
     status, _ = req('DELETE', path)
     if status in (200, 204):
         deleted_windows += 1
