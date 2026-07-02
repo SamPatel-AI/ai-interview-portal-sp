@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 const API_URL =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.PROD
-    ? 'https://ai-interview-portal-sp-production.up.railway.app'
+    ? 'https://ai-interview-portal-sp-production-976b.up.railway.app'
     : 'http://localhost:3001');
 
 export async function apiRequest<T = unknown>(
