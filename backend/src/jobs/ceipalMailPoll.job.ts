@@ -64,6 +64,22 @@ function pickResumeAttachment(
   };
 }
 
+/**
+ * Best-effort inbox cleanup. Moving mail is a WRITE (needs Mail.ReadWrite,
+ * not just Mail.Read) — until that permission is consented this 403s. The
+ * ledger already guarantees idempotency, so a failed move must never fail
+ * (or mislabel) an intake that succeeded.
+ */
+async function tryMoveToProcessed(messageId: string): Promise<void> {
+  try {
+    await moveMessageToProcessed(messageId);
+  } catch (err) {
+    logger.warn(
+      `ceipal-mail: move-to-Processed failed (grant Mail.ReadWrite to enable inbox cleanup): ${(err as Error).message}`,
+    );
+  }
+}
+
 async function updateLedger(
   internetMessageId: string,
   fields: Record<string, unknown>,
@@ -106,7 +122,7 @@ async function processMessage(orgId: string, msg: GraphMailMessage): Promise<
   ) {
     logger.info(`ceipal-mail: ${parsed.jpcCode} is not assigned to our recruiter — skipping ${parsed.email}`);
     await updateLedger(msg.internetMessageId, { status: 'skipped', job_code: parsed.jpcCode });
-    await moveMessageToProcessed(msg.id);
+    await tryMoveToProcessed(msg.id);
     return 'skipped';
   }
 
@@ -151,7 +167,7 @@ async function processMessage(orgId: string, msg: GraphMailMessage): Promise<
     });
   }
 
-  await moveMessageToProcessed(msg.id);
+  await tryMoveToProcessed(msg.id);
   return result.matched ? 'processed' : 'unmatched';
 }
 
