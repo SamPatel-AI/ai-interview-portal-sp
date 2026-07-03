@@ -228,13 +228,21 @@ router.delete(
         if (rmErr) logger.error(`Failed to remove resume files for ${candidateId}:`, rmErr);
       }
 
-      const { error: delErr } = await supabaseAdmin
+      // .select('id') makes the delete PROVE it removed rows — a 0-row delete
+      // must be a loud error, never a silent success (an erasure that doesn't
+      // erase is worse than a failure: the caller believes the PII is gone).
+      const { data: deletedRows, error: delErr } = await supabaseAdmin
         .from('candidates')
         .delete()
         .eq('id', candidateId)
-        .eq('org_id', req.user!.org_id);
+        .eq('org_id', req.user!.org_id)
+        .select('id');
 
       if (delErr) throw new AppError(500, `Failed to delete candidate: ${delErr.message}`);
+      if (!deletedRows?.length) {
+        logger.error(`Candidate delete affected 0 rows (id=${candidateId}, org=${req.user!.org_id})`);
+        throw new AppError(500, 'Delete affected no rows — candidate was not removed');
+      }
 
       // Log the erasure by id only — the point is to stop holding their PII.
       await supabaseAdmin.from('activity_log').insert({
