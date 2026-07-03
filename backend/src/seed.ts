@@ -596,7 +596,7 @@ EDUCATION: B.S. Computer Science, UT Dallas, 2022`,
     { candidate_email: 'seetha.ram@gmail.com', job_code: 'JPC-2195' },
   ];
 
-  let appCount = 0;
+
   for (const app of applications) {
     const candidateId = candMap.get(app.candidate_email);
     const jobId = jobMap.get(app.job_code);
@@ -618,7 +618,7 @@ EDUCATION: B.S. Computer Science, UT Dallas, 2022`,
         status: 'new',
         assigned_recruiter_id: userId,
       });
-      appCount++;
+
     }
   }
 
