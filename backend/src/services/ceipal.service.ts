@@ -104,7 +104,7 @@ export async function getCeipalToken(): Promise<string> {
 async function fetchCeipalJobs(token: string, searchKey?: string): Promise<CeipalJob[]> {
   const all: CeipalJob[] = [];
   let page = 1;
-  let numPages = 1;
+  let numPages: number;
 
   // CEIPAL paginates getJobPostingsList (default 20/page). Loop until all pages
   // are fetched so we don't silently miss older jobs.
@@ -154,7 +154,7 @@ function normalizeCompanyName(name: string): string {
 async function fetchCeipalClients(token: string): Promise<CeipalClient[]> {
   const all: CeipalClient[] = [];
   let page = 1;
-  let numPages = 1;
+  let numPages: number;
   do {
     const url = new URL('https://api.ceipal.com/v1/getClientsList/');
     url.searchParams.set('page', String(page));
@@ -197,7 +197,7 @@ async function fetchClientJobCodes(
 ): Promise<{ codes: string[]; count: number }> {
   const codes: string[] = [];
   let page = 1;
-  let numPages = 1;
+  let numPages: number;
   let count = 0;
   do {
     // `client` must be the raw encoded id; verified that this param actually
