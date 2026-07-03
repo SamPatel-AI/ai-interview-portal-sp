@@ -96,8 +96,8 @@ export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
                   {call.direction === 'outbound' ? <PhoneOutgoing className="h-3 w-3" /> : <PhoneIncoming className="h-3 w-3" />}
                   {call.direction}
                 </Badge>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig[call.status]?.color ?? ''}`}>
-                  {statusConfig[call.status]?.label ?? call.status}
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CALL_STATUS_COLORS[call.status] ?? ''}`}>
+                  {CALL_STATUS_LABELS[call.status] ?? call.status}
                 </span>
                 <span className="text-xs text-muted-foreground">{formatDuration(call.duration_seconds)}</span>
                 <span className="text-xs text-muted-foreground">{formatDate(call.started_at || call.scheduled_at)}</span>
