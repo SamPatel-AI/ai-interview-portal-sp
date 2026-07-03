@@ -13,6 +13,10 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
 
   RETELL_API_KEY: z.string().default(''),
+  // Retell signs webhooks with the account key TAGGED "Webhook" in the Retell
+  // dashboard — which can be a DIFFERENT key than the one used for API calls.
+  // Set this to that key; when unset, verification falls back to RETELL_API_KEY.
+  RETELL_WEBHOOK_KEY: z.string().default(''),
   RETELL_FROM_NUMBER: z.string().default('+10000000000'),
 
   // Shared secret required (when set) on candidate-intake and cal-booking webhooks

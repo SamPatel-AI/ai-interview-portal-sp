@@ -10,18 +10,23 @@ function rawBodyString(req: Request): string {
   return JSON.stringify(req.body);
 }
 
-// Retell signs webhook payloads with your API key (x-retell-signature header).
-// If RETELL_API_KEY is not configured (local dev without Retell), requests pass
-// with a warning so the demo flow keeps working.
+// Retell signs webhook payloads (x-retell-signature header) with the account
+// key TAGGED "Webhook" in its dashboard — which can be a different key than
+// the one this backend calls the API with. Verify against RETELL_WEBHOOK_KEY
+// first, then RETELL_API_KEY (covers single-key accounts). If neither is
+// configured (local dev without Retell), requests pass with a warning so the
+// demo flow keeps working.
 export function verifyRetellSignature(req: Request, res: Response, next: NextFunction): void {
-  if (!env.RETELL_API_KEY) {
-    logger.warn('RETELL_API_KEY not set — skipping Retell webhook signature verification');
+  const keys = [env.RETELL_WEBHOOK_KEY, env.RETELL_API_KEY].filter(Boolean);
+  if (!keys.length) {
+    logger.warn('RETELL_WEBHOOK_KEY/RETELL_API_KEY not set — skipping Retell webhook signature verification');
     next();
     return;
   }
 
   const signature = req.headers['x-retell-signature'];
-  if (typeof signature !== 'string' || !Retell.verify(rawBodyString(req), env.RETELL_API_KEY, signature)) {
+  const body = rawBodyString(req);
+  if (typeof signature !== 'string' || !keys.some((key) => Retell.verify(body, key, signature))) {
     logRetellRejectDiagnostics(req, signature);
     res.status(401).json({ error: 'Invalid signature' });
     return;
@@ -48,7 +53,7 @@ function logRetellRejectDiagnostics(req: Request, signature: unknown): void {
       parts.push(`sig timestamp age=${ageMs}ms (limit 300000)`);
       const body = rawBodyString(req);
       const expected = crypto
-        .createHmac('sha256', env.RETELL_API_KEY)
+        .createHmac('sha256', env.RETELL_WEBHOOK_KEY || env.RETELL_API_KEY)
         .update(body + m[1])
         .digest('hex');
       parts.push(`digest match=${expected === m[2]} (got ${m[2].slice(0, 8)}…, expected ${expected.slice(0, 8)}…)`);
