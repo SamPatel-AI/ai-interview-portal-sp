@@ -43,8 +43,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
               <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+
                 <Route path="/dashboard" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
                 <Route path="/candidates" element={<ErrorBoundary><Candidates /></ErrorBoundary>} />
                 <Route path="/jobs" element={<ErrorBoundary><Jobs /></ErrorBoundary>} />
