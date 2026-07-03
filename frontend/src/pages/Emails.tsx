@@ -181,7 +181,7 @@ export default function Emails() {
                   <p className="text-sm text-muted-foreground mb-2">Body</p>
                   <Card>
                     <CardContent className="p-4">
-                      <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: selectedEmail.body }} />
+                      <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedEmail.body) }} />
                     </CardContent>
                   </Card>
                 </div>
