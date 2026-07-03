@@ -14,16 +14,8 @@ import CallDetailSheet from '@/components/organisms/calls/CallDetailSheet';
 import Pagination from '@/components/molecules/Pagination';
 import { useCalls, useInitiateCall, useScheduleCall } from '@/domains/calls';
 import { useApplications } from '@/domains/applications';
+import { CALL_STATUS_LABELS } from '@/lib/constants';
 
-const CALL_STATUS_LABELS: Record<string, string> = {
-  completed: 'Completed',
-  scheduled: 'Scheduled',
-  in_progress: 'In Progress',
-  failed: 'Failed',
-  no_answer: 'No Answer',
-  voicemail: 'Voicemail',
-  interrupted: 'Interrupted',
-};
 
 function getCallOutcome(call: { status: string; disconnection_reason: string | null }) {
   const reason = call.disconnection_reason;
