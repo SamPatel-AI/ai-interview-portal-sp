@@ -1,18 +1,18 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/api';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
 import {
   Loader2, CheckCircle, XCircle, Mail, ArrowRight, ThumbsUp, ThumbsDown, Trophy, UserCheck,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useApplication, useAssignRecruiter } from '@/domains/applications';
+import {
+  useApplication, useAssignRecruiter, useScreenApplication,
+  useApproveInterview, useUpdateApplication,
+} from '@/domains/applications';
 import { useTeamRecruiters } from '@/domains/settings';
 import ApplicationScreeningPanel from './ApplicationScreeningPanel';
 import ApplicationCallsPanel from './ApplicationCallsPanel';
@@ -22,12 +22,9 @@ import { subStatusBadge, phaseClasses } from './applicationListHelpers';
 import { PIPELINE_STAGE_LABELS, PIPELINE_STAGE_COLORS } from '@/lib/constants';
 
 const PIPELINE_SEQUENCE = ['new', 'in_progress', 'interviewed', 'shortlisted'] as const;
-type SequenceStage = typeof PIPELINE_SEQUENCE[number];
 
-const stageIndex = (stage: string): number => {
-  const idx = (PIPELINE_SEQUENCE as readonly string[]).indexOf(stage);
-  return idx;
-};
+const stageIndex = (stage: string): number =>
+  (PIPELINE_SEQUENCE as readonly string[]).indexOf(stage);
 
 interface Props {
   applicationId: string | null;
@@ -36,49 +33,28 @@ interface Props {
 }
 
 export default function ApplicationDetailSheet({ applicationId, open, onOpenChange }: Props) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [screening, setScreening] = useState(false);
   const [recruiterNotes, setRecruiterNotes] = useState('');
   const [notesEditing, setNotesEditing] = useState(false);
 
   const { data, isLoading } = useApplication(open ? applicationId : null);
   const { recruiters } = useTeamRecruiters();
   const assignMutation = useAssignRecruiter();
+  const screenMutation = useScreenApplication();
+  const approveInterviewMutation = useApproveInterview();
+  const updateMutation = useUpdateApplication();
 
-  const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['applications'] });
+  const runScreen = () => { if (applicationId) screenMutation.mutate(applicationId); };
+  const runApprove = () => { if (applicationId) approveInterviewMutation.mutate({ id: applicationId }); };
+  const runStatus = (status: string) => { if (applicationId) updateMutation.mutate({ id: applicationId, status }); };
+  const runSaveNotes = (notes: string) => {
+    if (!applicationId) return;
+    updateMutation.mutate(
+      { id: applicationId, recruiter_notes: notes },
+      { onSuccess: () => setNotesEditing(false) },
+    );
   };
+  const screening = screenMutation.isPending;
 
-  const screenMutation = useMutation({
-    mutationFn: () => apiRequest(`/api/applications/${applicationId}/screen`, { method: 'POST' }),
-    onMutate: () => setScreening(true),
-    onSuccess: () => { toast({ title: 'AI screening complete' }); invalidateAll(); setScreening(false); },
-    onError: (e: Error) => { toast({ title: 'Screening failed', description: e.message, variant: 'destructive' }); setScreening(false); },
-  });
-
-  const approveInterviewMutation = useMutation({
-    mutationFn: () => apiRequest(`/api/applications/${applicationId}/approve-interview`, { method: 'POST' }),
-    onSuccess: () => { toast({ title: 'Invitation email sent', description: 'Candidate will receive booking link' }); invalidateAll(); },
-    onError: (e: Error) => toast({ title: 'Failed to send invitation', description: e.message, variant: 'destructive' }),
-  });
-
-  const updateStatusMutation = useMutation({
-    mutationFn: (status: string) =>
-      apiRequest(`/api/applications/${applicationId}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-    onSuccess: (_, status) => {
-      toast({ title: status === 'shortlisted' ? 'Candidate shortlisted' : status === 'rejected' ? 'Candidate rejected' : 'Status updated' });
-      invalidateAll();
-    },
-    onError: (e: Error) => toast({ title: 'Update failed', description: e.message, variant: 'destructive' }),
-  });
-
-  const notesMutation = useMutation({
-    mutationFn: (notes: string) =>
-      apiRequest(`/api/applications/${applicationId}`, { method: 'PATCH', body: JSON.stringify({ recruiter_notes: notes }) }),
-    onSuccess: () => { toast({ title: 'Notes saved' }); invalidateAll(); setNotesEditing(false); },
-    onError: (e: Error) => toast({ title: 'Failed to save notes', description: e.message, variant: 'destructive' }),
-  });
 
   const app = data?.data;
   const score = app ? getScore(app.ai_screening_score) : null;
@@ -164,7 +140,7 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
                   score={app.ai_screening_score}
                   result={app.ai_screening_result}
                   screening={screening}
-                  onScreen={() => screenMutation.mutate()}
+                  onScreen={() => runScreen()}
                 />
 
                 {score !== null && !hasInvitation && !['rejected', 'shortlisted', 'hired', 'interviewed'].includes(app.status) && (
@@ -173,7 +149,7 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
                     <div className="flex gap-2">
                       <Button
                         className="flex-1"
-                        onClick={() => approveInterviewMutation.mutate()}
+                        onClick={() => runApprove()}
                         disabled={approveInterviewMutation.isPending}
                       >
                         {approveInterviewMutation.isPending
@@ -183,8 +159,8 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
                       <Button
                         variant="outline"
                         className="text-destructive hover:bg-destructive/10 border-destructive/20"
-                        onClick={() => updateStatusMutation.mutate('rejected')}
-                        disabled={updateStatusMutation.isPending}
+                        onClick={() => runStatus('rejected')}
+                        disabled={updateMutation.isPending}
                       >
                         <XCircle className="h-4 w-4 mr-1" />Reject
                       </Button>
@@ -248,8 +224,8 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
                     <div className="space-y-2">
                       <Textarea value={recruiterNotes} onChange={e => setRecruiterNotes(e.target.value)} rows={3} placeholder="Add your notes about this candidate..." />
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => notesMutation.mutate(recruiterNotes)} disabled={notesMutation.isPending}>
-                          {notesMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}Save
+                        <Button size="sm" onClick={() => runSaveNotes(recruiterNotes)} disabled={updateMutation.isPending}>
+                          {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}Save
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => setNotesEditing(false)}>Cancel</Button>
                       </div>
@@ -272,16 +248,16 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
                       <div className="flex gap-2">
                         <Button
                           className="flex-1 bg-success hover:bg-success/90 text-white"
-                          onClick={() => updateStatusMutation.mutate('shortlisted')}
-                          disabled={updateStatusMutation.isPending}
+                          onClick={() => runStatus('shortlisted')}
+                          disabled={updateMutation.isPending}
                         >
                           <ThumbsUp className="h-4 w-4 mr-2" />Shortlist for Next Round
                         </Button>
                         <Button
                           variant="outline"
                           className="flex-1 text-destructive hover:bg-destructive/10 border-destructive/20"
-                          onClick={() => updateStatusMutation.mutate('rejected')}
-                          disabled={updateStatusMutation.isPending}
+                          onClick={() => runStatus('rejected')}
+                          disabled={updateMutation.isPending}
                         >
                           <ThumbsDown className="h-4 w-4 mr-2" />Reject
                         </Button>

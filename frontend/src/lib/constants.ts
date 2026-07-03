@@ -41,6 +41,40 @@ export const JOB_STATUS_COLORS: Record<string, string> = {
   filled: 'bg-blue-500/10 text-blue-600',
 };
 
+export const JOB_STATUS_COLORS_BORDER: Record<string, string> = {
+  open: 'bg-success/10 text-success border-success/20',
+  closed: 'bg-destructive/10 text-destructive border-destructive/20',
+  on_hold: 'bg-warning/10 text-warning border-warning/20',
+  filled: 'bg-info/10 text-info border-info/20',
+};
+
+export const CALL_STATUS_LABELS: Record<string, string> = {
+  completed: 'Completed',
+  scheduled: 'Scheduled',
+  in_progress: 'In Progress',
+  failed: 'Failed',
+  no_answer: 'No Answer',
+  voicemail: 'Voicemail',
+  interrupted: 'Interrupted',
+};
+
+// Pipeline chart bar colors (Dashboard).
+// Keys are capitalized backend stage labels ("New", "Screening", ...).
+export const PIPELINE_STAGE_BAR_COLORS: Record<string, string> = {
+  New: 'bg-info',
+  Screening: 'bg-warning',
+  Interviewed: 'bg-primary',
+  Shortlisted: 'bg-accent',
+  Hired: 'bg-success',
+};
+
+export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
+  full_time: 'Full Time',
+  contract: 'Contract',
+  c2c: 'Corp-to-Corp (C2C)',
+  w2: 'W2',
+};
+
 export const EMAIL_TYPE_COLORS: Record<string, string> = {
   invitation: 'bg-primary/10 text-primary',
   follow_up: 'bg-blue-500/10 text-blue-600',

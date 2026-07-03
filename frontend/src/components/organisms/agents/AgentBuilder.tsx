@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest, type ApiResponse } from '@/lib/api';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -25,6 +24,7 @@ import {
   useSyncAgent, usePullAgent, useTestCallAgent, useSetDefaultAgent,
   type BuilderConfig, type CreateAgentInput,
 } from '@/domains/agents';
+import { useCompanies } from '@/domains/companies';
 import { useAuthMe } from '@/domains/auth';
 import SyncStatusBadge from './SyncStatusBadge';
 
@@ -108,11 +108,7 @@ export default function AgentBuilder({ open, onOpenChange, agentId }: Props) {
   const { data: voicesRes } = useVoices();
   const voices = voicesRes?.data ?? [];
 
-  const { data: companiesRes } = useQuery({
-    queryKey: ['companies-list'],
-    queryFn: () => apiRequest<ApiResponse<Company[]>>('/api/companies'),
-    enabled: open,
-  });
+  const { data: companiesRes } = useCompanies();
   const companies = companiesRes?.data ?? [];
 
   const { data: meRes } = useAuthMe();

@@ -7,14 +7,8 @@ import { DashboardSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import { useOverview } from '@/domains/analytics';
 import type { RecentActivityItem, PipelineStage } from '@/domains/analytics';
+import { PIPELINE_STAGE_BAR_COLORS } from '@/lib/constants';
 
-const pipelineColors: Record<string, string> = {
-  New: 'bg-info',
-  Screening: 'bg-warning',
-  Interviewed: 'bg-primary',
-  Shortlisted: 'bg-accent',
-  Hired: 'bg-success',
-};
 
 const ACTION_LABELS: Record<string, string> = {
   ai_screening_complete: 'AI Screening Complete',
@@ -118,7 +112,7 @@ export default function Dashboard() {
                       <span className="text-sm text-muted-foreground w-24 shrink-0">{stage.stage}</span>
                       <div className="flex-1 bg-muted rounded-full h-6 overflow-hidden">
                         <div
-                          className={`h-full ${pipelineColors[stage.stage] || 'bg-primary'} rounded-full flex items-center justify-end pr-2 transition-all`}
+                          className={`h-full ${PIPELINE_STAGE_BAR_COLORS[stage.stage] || 'bg-primary'} rounded-full flex items-center justify-end pr-2 transition-all`}
                           style={{ width: `${(stage.count / maxPipeline) * 100}%` }}
                         >
                           <span className="text-xs font-medium text-primary-foreground">{stage.count}</span>

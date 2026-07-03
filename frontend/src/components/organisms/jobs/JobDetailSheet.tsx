@@ -1,5 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -8,6 +6,13 @@ import {
   Loader2, MapPin, Building2, Bot, User, Briefcase,
   FileCode, DollarSign, Globe, Clock, Hash,
 } from 'lucide-react';
+import { useJob } from '@/domains/jobs';
+import { getScore, scoreColor } from '@/components/organisms/applications/applicationListHelpers';
+import {
+  JOB_STATUS_COLORS_BORDER,
+  APPLICATION_STATUS_COLORS,
+  EMPLOYMENT_TYPE_LABELS,
+} from '@/lib/constants';
 
 interface JobApplication {
   id: string;
@@ -37,39 +42,6 @@ interface JobDetail {
   applications?: JobApplication[];
 }
 
-const statusColors: Record<string, string> = {
-  open: 'bg-success/10 text-success border-success/20',
-  closed: 'bg-destructive/10 text-destructive border-destructive/20',
-  on_hold: 'bg-warning/10 text-warning border-warning/20',
-  filled: 'bg-info/10 text-info border-info/20',
-};
-
-const appStatusColors: Record<string, string> = {
-  new: 'bg-info/10 text-info',
-  screening: 'bg-warning/10 text-warning',
-  interviewed: 'bg-primary/10 text-primary',
-  shortlisted: 'bg-accent/10 text-accent',
-  rejected: 'bg-destructive/10 text-destructive',
-  hired: 'bg-success/10 text-success',
-};
-
-const employmentLabels: Record<string, string> = {
-  full_time: 'Full Time',
-  contract: 'Contract',
-  c2c: 'Corp-to-Corp (C2C)',
-  w2: 'W2',
-};
-
-const getScore = (score: JobApplication['ai_screening_score']): number | null => {
-  if (score === null || score === undefined) return null;
-  if (typeof score === 'number') return score;
-  if (typeof score === 'object' && 'score' in score) return score.score;
-  return null;
-};
-
-const scoreColor = (s: number | null) =>
-  s === null ? 'text-muted-foreground' : s >= 7 ? 'text-success' : s >= 4 ? 'text-warning' : 'text-destructive';
-
 interface Props {
   jobId: string | null;
   open: boolean;
@@ -77,13 +49,8 @@ interface Props {
 }
 
 export default function JobDetailSheet({ jobId, open, onOpenChange }: Props) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['job-detail', jobId],
-    queryFn: () => apiRequest<ApiResponse<JobDetail>>(`/api/jobs/${jobId}`),
-    enabled: !!jobId && open,
-  });
-
-  const job = data?.data;
+  const { data, isLoading } = useJob(open ? jobId : null);
+  const job = data?.data as unknown as JobDetail | undefined;
   const applications = job?.applications ?? [];
   const locationParts = [job?.location, job?.state, job?.country].filter(Boolean);
 
@@ -116,7 +83,7 @@ export default function JobDetailSheet({ jobId, open, onOpenChange }: Props) {
                     )}
                   </div>
                 </div>
-                <Badge variant="outline" className={`shrink-0 capitalize ${statusColors[job.status] || ''}`}>
+                <Badge variant="outline" className={`shrink-0 capitalize ${JOB_STATUS_COLORS_BORDER[job.status] || ''}`}>
                   {job.status?.replace('_', ' ')}
                 </Badge>
               </div>
@@ -130,7 +97,7 @@ export default function JobDetailSheet({ jobId, open, onOpenChange }: Props) {
                   {locationParts.length > 0 && (
                     <InfoItem icon={MapPin} label="Location" value={locationParts.join(', ')} />
                   )}
-                  <InfoItem icon={Briefcase} label="Employment Type" value={employmentLabels[job.employment_type] || job.employment_type} />
+                  <InfoItem icon={Briefcase} label="Employment Type" value={EMPLOYMENT_TYPE_LABELS[job.employment_type] || job.employment_type} />
                   {job.tax_terms && (
                     <InfoItem icon={DollarSign} label="Tax Terms" value={job.tax_terms} />
                   )}
@@ -194,7 +161,7 @@ export default function JobDetailSheet({ jobId, open, onOpenChange }: Props) {
                   ) : (
                     <div className="space-y-2">
                       {applications.map((app) => {
-                        const score = getScore(app.ai_screening_score);
+                        const score = getScore(app.ai_screening_score as never);
                         return (
                           <div key={app.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
                             <div className="flex-1 min-w-0">
@@ -211,7 +178,7 @@ export default function JobDetailSheet({ jobId, open, onOpenChange }: Props) {
                                   {score}/10
                                 </span>
                               )}
-                              <Badge variant="outline" className={`text-xs capitalize ${appStatusColors[app.status] || ''}`}>
+                              <Badge variant="outline" className={`text-xs capitalize ${APPLICATION_STATUS_COLORS[app.status] || ''}`}>
                                 {app.status}
                               </Badge>
                             </div>

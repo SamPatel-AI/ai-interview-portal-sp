@@ -1,52 +1,13 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Loader2, Mail, Phone, MapPin, FileText, ChevronDown, ExternalLink, Sparkles } from 'lucide-react';
-import type { ScreeningResult } from '@/domains/applications';
-
-interface CandidateDetail {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string;
-  location: string | null;
-  work_authorization: string | null;
-  source: string;
-  resume_url: string | null;
-  resume_text: string | null;
-  created_at: string;
-  applications?: {
-    id: string;
-    status: string;
-    created_at: string;
-    ai_screening_score: number | { score: number; explanation?: string } | null;
-    ai_screening_result?: ScreeningResult | null;
-    jobs?: { title: string };
-  }[];
-  calls?: {
-    id: string;
-    status: string;
-    duration_seconds: number | null;
-    started_at: string | null;
-  }[];
-}
-
-
-const getScore = (score: number | { score: number; explanation?: string } | null | undefined): number | null => {
-  if (score === null || score === undefined) return null;
-  if (typeof score === 'number') return score;
-  if (typeof score === 'object' && 'score' in score) return score.score;
-  return null;
-};
-
-const scoreColor = (s: number | null) => s === null ? 'text-muted-foreground' : s >= 7 ? 'text-success' : s >= 4 ? 'text-warning' : 'text-destructive';
+import { useCandidate } from '@/domains/candidates';
+import { getScore, scoreColor } from '@/components/organisms/applications/applicationListHelpers';
 
 interface Props {
   candidateId: string | null;
@@ -55,13 +16,10 @@ interface Props {
 }
 
 export default function CandidateDetailSheet({ candidateId, open, onOpenChange }: Props) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['candidate-detail', candidateId],
-    queryFn: () => apiRequest<ApiResponse<CandidateDetail>>(`/api/candidates/${candidateId}`),
-    enabled: !!candidateId && open,
-  });
+  const { data, isLoading } = useCandidate(open ? candidateId : null);
 
   const c = data?.data;
+
 
   const latestScreening = useMemo(() => {
     if (!c?.applications?.length) return null;

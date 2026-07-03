@@ -1,15 +1,13 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   PhoneIncoming, PhoneOutgoing, Star, Loader2, CheckCircle, XCircle,
   MessageSquare, Volume2
 } from 'lucide-react';
+import { useCall } from '@/domains/calls';
+import { CALL_STATUS_COLORS, CALL_STATUS_LABELS } from '@/lib/constants';
 
 interface CallDetail {
   id: string;
@@ -45,15 +43,6 @@ interface CallDetail {
   parent_call?: { id: string; status: string } | null;
 }
 
-const statusConfig: Record<string, { color: string; label: string }> = {
-  completed: { color: 'bg-success/10 text-success', label: 'Completed' },
-  scheduled: { color: 'bg-info/10 text-info', label: 'Scheduled' },
-  in_progress: { color: 'bg-warning/10 text-warning', label: 'In Progress' },
-  failed: { color: 'bg-destructive/10 text-destructive', label: 'Failed' },
-  no_answer: { color: 'bg-muted text-muted-foreground', label: 'No Answer' },
-  interrupted: { color: 'bg-warning/10 text-warning', label: 'Interrupted' },
-};
-
 const formatDuration = (s: number | null) => {
   if (!s) return '—';
   const m = Math.floor(s / 60);
@@ -71,13 +60,10 @@ interface Props {
 }
 
 export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['call-detail', callId],
-    queryFn: () => apiRequest<ApiResponse<CallDetail>>(`/api/calls/${callId}`),
-    enabled: !!callId && open,
-  });
+  const { data, isLoading } = useCall(open ? callId : null);
 
-  const call = data?.data;
+  const call = data?.data as unknown as CallDetail | undefined;
+
 
   const parseTranscript = (): { role: string; content: string }[] => {
     if (!call) return [];
@@ -110,8 +96,8 @@ export default function CallDetailSheet({ callId, open, onOpenChange }: Props) {
                   {call.direction === 'outbound' ? <PhoneOutgoing className="h-3 w-3" /> : <PhoneIncoming className="h-3 w-3" />}
                   {call.direction}
                 </Badge>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig[call.status]?.color ?? ''}`}>
-                  {statusConfig[call.status]?.label ?? call.status}
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CALL_STATUS_COLORS[call.status] ?? ''}`}>
+                  {CALL_STATUS_LABELS[call.status] ?? call.status}
                 </span>
                 <span className="text-xs text-muted-foreground">{formatDuration(call.duration_seconds)}</span>
                 <span className="text-xs text-muted-foreground">{formatDate(call.started_at || call.scheduled_at)}</span>
