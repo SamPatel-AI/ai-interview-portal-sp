@@ -112,7 +112,7 @@ export default function Dashboard() {
                       <span className="text-sm text-muted-foreground w-24 shrink-0">{stage.stage}</span>
                       <div className="flex-1 bg-muted rounded-full h-6 overflow-hidden">
                         <div
-                          className={`h-full ${pipelineColors[stage.stage] || 'bg-primary'} rounded-full flex items-center justify-end pr-2 transition-all`}
+                          className={`h-full ${PIPELINE_STAGE_BAR_COLORS[stage.stage] || 'bg-primary'} rounded-full flex items-center justify-end pr-2 transition-all`}
                           style={{ width: `${(stage.count / maxPipeline) * 100}%` }}
                         >
                           <span className="text-xs font-medium text-primary-foreground">{stage.count}</span>
