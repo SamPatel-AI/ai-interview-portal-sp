@@ -11,6 +11,7 @@ import EmptyState from '@/components/molecules/EmptyState';
 import { useEmails } from '@/domains/emails';
 import type { EmailLog } from '@/domains/emails';
 import { EMAIL_TYPE_COLORS, EMAIL_STATUS_COLORS, EMAIL_TYPE_LABELS } from '@/lib/constants';
+import DOMPurify from 'dompurify';
 
 export default function Emails() {
   const [search, setSearch] = useState('');
@@ -180,7 +181,7 @@ export default function Emails() {
                   <p className="text-sm text-muted-foreground mb-2">Body</p>
                   <Card>
                     <CardContent className="p-4">
-                      <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: selectedEmail.body }} />
+                      <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedEmail.body) }} />
                     </CardContent>
                   </Card>
                 </div>
