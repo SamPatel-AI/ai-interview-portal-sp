@@ -18,18 +18,15 @@ import ApplicationScreeningPanel from './ApplicationScreeningPanel';
 import ApplicationCallsPanel from './ApplicationCallsPanel';
 import ApplicationEmailsPanel from './ApplicationEmailsPanel';
 import { getScore } from './applicationDetailHelpers';
+import { subStatusBadge, phaseClasses } from './applicationListHelpers';
+import { PIPELINE_STAGE_LABELS, PIPELINE_STAGE_COLORS } from '@/lib/constants';
 
-const pipelineSteps = [
-  { key: 'new', label: 'New' },
-  { key: 'screening', label: 'Screening' },
-  { key: 'interviewed', label: 'Interviewed' },
-  { key: 'shortlisted', label: 'Shortlisted' },
-] as const;
+const PIPELINE_SEQUENCE = ['new', 'in_progress', 'interviewed', 'shortlisted'] as const;
+type SequenceStage = typeof PIPELINE_SEQUENCE[number];
 
-const getStepIndex = (status: string): number => {
-  if (status === 'rejected') return -1;
-  if (status === 'hired') return 4;
-  return pipelineSteps.findIndex(s => s.key === status);
+const stageIndex = (stage: string): number => {
+  const idx = (PIPELINE_SEQUENCE as readonly string[]).indexOf(stage);
+  return idx;
 };
 
 interface Props {
