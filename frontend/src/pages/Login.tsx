@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -101,10 +102,7 @@ export default function Login() {
             </Button>
 
             <p className="text-center text-sm text-muted-foreground mt-6">
-              Don't have an account?{' '}
-              <Link to="/signup" className="text-primary font-medium hover:underline">
-                Sign up
-              </Link>
+              Need an account? Ask your administrator for an invitation.
             </p>
           </CardContent>
         </Card>
@@ -112,3 +110,4 @@ export default function Login() {
     </div>
   );
 }
+

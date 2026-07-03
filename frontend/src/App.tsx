@@ -8,7 +8,6 @@ import ProtectedRoute from "@/components/molecules/ProtectedRoute";
 import DashboardLayout from "@/components/templates/DashboardLayout";
 import ErrorBoundary from "@/components/molecules/ErrorBoundary";
 import Login from "@/pages/Login";
-import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
 import Candidates from "@/pages/Candidates";
 import Jobs from "@/pages/Jobs";
@@ -22,6 +21,7 @@ import Analytics from "@/pages/Analytics";
 import SettingsPage from "@/pages/Settings";
 import ActivityLog from "@/pages/ActivityLog";
 import NotFound from "@/pages/NotFound";
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,8 +43,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
               <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+
                 <Route path="/dashboard" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
                 <Route path="/candidates" element={<ErrorBoundary><Candidates /></ErrorBoundary>} />
                 <Route path="/jobs" element={<ErrorBoundary><Jobs /></ErrorBoundary>} />
