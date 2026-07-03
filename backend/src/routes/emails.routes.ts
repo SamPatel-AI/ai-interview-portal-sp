@@ -18,14 +18,19 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const offset = (page - 1) * limit;
     const { candidate_id, application_id, type, status, search } = req.query;
 
-    // Email logs don't have org_id directly — join through candidates
+    // email_logs has no org_id — scope through the candidate with an INNER
+    // join AT THE QUERY LEVEL (candidate_id is NOT NULL, so every email has
+    // one). The old version paginated across ALL orgs and filtered in JS
+    // afterwards: totals counted other orgs' emails and pages could come back
+    // empty — a wrong-numbers bug and a cross-org count leak in one.
     let query = supabaseAdmin
       .from('email_logs')
       .select(`
         *,
-        candidates (id, first_name, last_name, email, org_id),
+        candidates!inner (id, first_name, last_name, email, org_id),
         applications (id, jobs (id, title))
-      `, { count: 'exact' });
+      `, { count: 'exact' })
+      .eq('candidates.org_id', req.user!.org_id);
 
     if (candidate_id) query = query.eq('candidate_id', candidate_id);
     if (application_id) query = query.eq('application_id', application_id);
@@ -38,16 +43,12 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     if (error) throw new AppError(500, 'Failed to fetch email logs');
 
-    // Filter to org-scoped candidates only
-    const orgScoped = (data || []).filter(
-      (e: any) => e.candidates?.org_id === req.user!.org_id
-    );
-
-    // Apply search filter on candidate name or subject
-    let filtered = orgScoped;
+    // Search filters the current page on candidate name or subject (kept in
+    // JS: PostgREST can't OR a base-table column against a joined column).
+    let filtered = data || [];
     if (search) {
       const s = (search as string).toLowerCase();
-      filtered = orgScoped.filter((e: any) => {
+      filtered = filtered.filter((e: any) => {
         const name = `${e.candidates?.first_name || ''} ${e.candidates?.last_name || ''}`.toLowerCase();
         return name.includes(s) || e.subject?.toLowerCase().includes(s);
       });
