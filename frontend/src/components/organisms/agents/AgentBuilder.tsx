@@ -108,11 +108,7 @@ export default function AgentBuilder({ open, onOpenChange, agentId }: Props) {
   const { data: voicesRes } = useVoices();
   const voices = voicesRes?.data ?? [];
 
-  const { data: companiesRes } = useQuery({
-    queryKey: ['companies-list'],
-    queryFn: () => apiRequest<ApiResponse<Company[]>>('/api/companies'),
-    enabled: open,
-  });
+  const { data: companiesRes } = useCompanies();
   const companies = companiesRes?.data ?? [];
 
   const { data: meRes } = useAuthMe();
