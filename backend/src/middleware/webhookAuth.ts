@@ -10,6 +10,17 @@ function rawBodyString(req: Request): string {
   return JSON.stringify(req.body);
 }
 
+// The skip-when-unconfigured behavior below is a DEV convenience. In
+// production a missing secret must not silently open a webhook to the
+// internet: refuse with 503 (a config error, not the caller's fault) so the
+// gap is loud and Retell/Cal retries keep the events until it's fixed.
+function failClosed(res: Response, varName: string): boolean {
+  if (env.NODE_ENV !== 'production') return false;
+  logger.error(`${varName} not set in production — refusing webhook (fail-closed)`);
+  res.status(503).json({ error: 'Webhook authentication is not configured' });
+  return true;
+}
+
 // Retell signs webhook payloads (x-retell-signature header) with the account
 // key TAGGED "Webhook" in its dashboard — which can be a different key than
 // the one this backend calls the API with. Verify against RETELL_WEBHOOK_KEY
@@ -19,6 +30,7 @@ function rawBodyString(req: Request): string {
 export function verifyRetellSignature(req: Request, res: Response, next: NextFunction): void {
   const keys = [env.RETELL_WEBHOOK_KEY, env.RETELL_API_KEY].filter(Boolean);
   if (!keys.length) {
+    if (failClosed(res, 'RETELL_WEBHOOK_KEY/RETELL_API_KEY')) return;
     logger.warn('RETELL_WEBHOOK_KEY/RETELL_API_KEY not set — skipping Retell webhook signature verification');
     next();
     return;
@@ -71,6 +83,7 @@ function logRetellRejectDiagnostics(req: Request, signature: unknown): void {
 // WEBHOOK_SHARED_SECRET. If the env var is unset, requests pass with a warning.
 export function requireWebhookSecret(req: Request, res: Response, next: NextFunction): void {
   if (!env.WEBHOOK_SHARED_SECRET) {
+    if (failClosed(res, 'WEBHOOK_SHARED_SECRET')) return;
     logger.warn('WEBHOOK_SHARED_SECRET not set — webhook accepted without authentication');
     next();
     return;
@@ -101,6 +114,7 @@ export function requireWebhookSecret(req: Request, res: Response, next: NextFunc
 export function verifyCalSignature(req: Request, res: Response, next: NextFunction): void {
   const secret = env.WEBHOOK_SHARED_SECRET;
   if (!secret) {
+    if (failClosed(res, 'WEBHOOK_SHARED_SECRET')) return;
     logger.warn('WEBHOOK_SHARED_SECRET not set — Cal.com webhook accepted without verification');
     next();
     return;
