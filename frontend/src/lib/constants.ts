@@ -71,6 +71,25 @@ export const APPLICATION_STATUS_LABELS: Record<string, string> = {
   hired: 'Hired',
 };
 
+// ─── Pipeline Stages (backend-computed) ────────────────────
+export const PIPELINE_STAGE_LABELS: Record<string, string> = {
+  new: 'New',
+  in_progress: 'In Progress',
+  interviewed: 'Interviewed',
+  failed: 'Failed',
+  shortlisted: 'Shortlisted',
+  archived: 'Archived',
+};
+
+export const PIPELINE_STAGE_COLORS: Record<string, string> = {
+  new: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+  in_progress: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
+  interviewed: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
+  failed: 'bg-destructive/10 text-destructive border-destructive/20',
+  shortlisted: 'bg-green-500/10 text-green-600 border-green-500/20',
+  archived: 'bg-muted text-muted-foreground border-muted',
+};
+
 export const REENGAGEMENT_STATUS_COLORS: Record<string, string> = {
   pending: 'bg-muted text-muted-foreground',
   matching: 'bg-blue-500/10 text-blue-600',

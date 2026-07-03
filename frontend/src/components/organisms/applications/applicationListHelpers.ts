@@ -93,14 +93,8 @@ export function failedAttempts(app: Application): number {
   return app.calls?.length ?? 0;
 }
 
-export const PIPELINE_STAGE_LABELS: Record<string, string> = {
-  new: 'New',
-  in_progress: 'In Progress',
-  interviewed: 'Interviewed',
-  failed: 'Failed',
-  shortlisted: 'Shortlisted',
-  archived: 'Archived',
-};
+export { PIPELINE_STAGE_LABELS } from '@/lib/constants';
+import { PIPELINE_STAGE_LABELS } from '@/lib/constants';
 
 export const humanizeStage = (stage: string | null | undefined) =>
   stage ? PIPELINE_STAGE_LABELS[stage] ?? stage : '—';
