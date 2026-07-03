@@ -24,6 +24,7 @@ import {
   useSyncAgent, usePullAgent, useTestCallAgent, useSetDefaultAgent,
   type BuilderConfig, type CreateAgentInput,
 } from '@/domains/agents';
+import { useCompanies } from '@/domains/companies';
 import { useAuthMe } from '@/domains/auth';
 import SyncStatusBadge from './SyncStatusBadge';
 
