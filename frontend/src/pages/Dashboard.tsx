@@ -7,14 +7,8 @@ import { DashboardSkeleton } from '@/components/molecules/PageSkeleton';
 import EmptyState from '@/components/molecules/EmptyState';
 import { useOverview } from '@/domains/analytics';
 import type { RecentActivityItem, PipelineStage } from '@/domains/analytics';
+import { PIPELINE_STAGE_BAR_COLORS } from '@/lib/constants';
 
-const pipelineColors: Record<string, string> = {
-  New: 'bg-info',
-  Screening: 'bg-warning',
-  Interviewed: 'bg-primary',
-  Shortlisted: 'bg-accent',
-  Hired: 'bg-success',
-};
 
 const ACTION_LABELS: Record<string, string> = {
   ai_screening_complete: 'AI Screening Complete',
