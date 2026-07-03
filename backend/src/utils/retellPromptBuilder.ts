@@ -321,7 +321,10 @@ export function buildSampleVariables(ctx: SampleContext): Record<string, string>
     candidate_email: 'alex.sample@example.com',
     candidate_background_summary: 'Five years of relevant experience with strong communication skills.',
     candidate_talking_points: 'Recently led a cross-functional project. Background in the target industry.',
-    job_title: ctx.jobTitle || 'the position',
+    // Realistic noun phrase: templates embed this as "the {{job_title}}
+    // position", so a fallback of "the position" spoke as "the the position
+    // position" on live test calls.
+    job_title: ctx.jobTitle || 'Software Engineer',
     company_name: ctx.companyName || 'our company',
     job_location: 'Remote',
     interview_style_instructions: 'Style: Warm and conversational.',

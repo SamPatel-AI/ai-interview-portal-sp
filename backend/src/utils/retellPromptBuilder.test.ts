@@ -97,9 +97,13 @@ describe('buildSampleVariables', () => {
     }
   });
 
-  it('falls back to generic title/company when none given', () => {
+  it('falls back to a realistic noun-phrase title/company when none given', () => {
     const vars = buildSampleVariables({});
-    expect(vars.job_title).toBe('the position');
+    // Templates say "the {{job_title}} position" — the fallback must be a bare
+    // noun phrase ("Software Engineer"), not one that doubles the article/noun
+    // ("the the position position").
+    expect(vars.job_title).toBe('Software Engineer');
+    expect(vars.job_title).not.toMatch(/\bthe\b|\bposition\b/i);
     expect(vars.company_name.length).toBeGreaterThan(0);
   });
 });
