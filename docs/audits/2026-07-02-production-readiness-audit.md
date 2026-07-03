@@ -21,11 +21,11 @@ client-ready; strike items as they land.
 
 | # | Finding | Fix | Status |
 |---|---------|-----|--------|
-| B1 | `POST /api/auth/signup` public, email pre-confirmed, accepted arbitrary `org_id` → outsider joins ANY org as recruiter (or becomes admin of a new org) | Invite-only signup: org-join path removed, self-serve gated behind `ALLOW_PUBLIC_SIGNUP=false`; members via admin `POST /api/users/invite`. Lovable prompt removes the Signup page | **PR #25** |
-| B2 | `resumes` storage bucket policies allowed any authenticated user to read/overwrite every org's resumes | Migration **017**: drop permissive policies, pin bucket private (all access is backend/service-role; verified frontend never touches storage) | **PR #25** — apply 017 after merge |
+| B1 | `POST /api/auth/signup` public, email pre-confirmed, accepted arbitrary `org_id` → outsider joins ANY org as recruiter (or becomes admin of a new org) | Invite-only signup: org-join path removed, self-serve gated behind `ALLOW_PUBLIC_SIGNUP=false`; members via admin `POST /api/users/invite`. Lovable prompt removes the Signup page | ✅ DONE — #25 merged+deployed 7/2 |
+| B2 | `resumes` storage bucket policies allowed any authenticated user to read/overwrite every org's resumes | Migration **017**: drop permissive policies, pin bucket private (all access is backend/service-role; verified frontend never touches storage) | ✅ DONE — 017 applied 7/2, bucket verified private |
 | B3 | Live secrets travel unencrypted in `.env` files (never committed — verified) | Rotate ALL third-party secrets (Supabase service-role, Retell, CEIPAL, OpenRouter, Graph, Cal, webhook secret) | OPEN — Day 2 |
-| B4 | `POST /api/portal/generate-token` unauthenticated → 72h PII token for any candidate UUID | `authenticate` + `requireRole(admin,recruiter)` + candidate must be in caller's org | **PR #25** |
-| B5 | Re-engagement sweep runaway: every 6h it treated ~1,730 CEIPAL "open" jobs as stale → 68k junk campaigns / 1.05M child rows; mass-email prevented only by an email-dedup bug (all campaign emails shared one BullMQ jobId) | Sweep opt-in (`REENGAGEMENT_AUTO_SWEEP=false`, removes persisted Redis repeatable at boot), jobId collision fixed, 30-day job recency, 7-day campaign cooldown. Purge script: `scripts/ops/purge_campaigns.py` | **PR #24** + purge |
+| B4 | `POST /api/portal/generate-token` unauthenticated → 72h PII token for any candidate UUID | `authenticate` + `requireRole(admin,recruiter)` + candidate must be in caller's org | ✅ DONE — #25 merged+deployed 7/2 |
+| B5 | Re-engagement sweep runaway: every 6h it treated ~1,730 CEIPAL "open" jobs as stale → 68k junk campaigns / 1.05M child rows; mass-email prevented only by an email-dedup bug (all campaign emails shared one BullMQ jobId) | Sweep opt-in (`REENGAGEMENT_AUTO_SWEEP=false`, removes persisted Redis repeatable at boot), jobId collision fixed, 30-day job recency, 7-day campaign cooldown. Purge script: `scripts/ops/purge_campaigns.py` | ✅ code DONE — #24 merged+deployed 7/2; prod logs confirm recurring job REMOVED. ⏳ purge of 68k junk rows still to run (user-run only) |
 | B6 | Retell agents synced 6/16 (pre account-move) → their webhook URLs likely point at the DEAD old Railway domain → post-call transcripts/evals silently lost | Re-sync all 3 agents (`scripts/ops/update_agent_personas.py` does this while applying the Grace/Adrian/Brian personas). Verify webhook URL in Retell dashboard | Script ready — RUN |
 
 ## High priority (Day 2)
@@ -88,9 +88,9 @@ client-ready; strike items as they land.
 
 ## Operational runbooks
 
-**Apply a single migration** (remote history only tracks 005; `db push` would
-try to re-apply everything): temporarily `mv` all other `supabase/migrations/*.sql`
-files to /tmp, `supabase db push --linked --yes`, restore the files.
+**Apply a migration**: remote history is fully in sync (001–017 as of 7/2), so a
+plain `supabase db push --linked` applies exactly the pending files. (The old
+single-file `mv` trick is obsolete.)
 
 **Purge junk campaigns**: `python3 scripts/ops/purge_campaigns.py` (reads
 `backend/.env`; deletes ALL reengagement_campaigns in 6h windows, children

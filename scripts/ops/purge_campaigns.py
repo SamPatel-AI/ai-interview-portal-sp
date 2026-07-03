@@ -1,10 +1,17 @@
 """Purge ALL reengagement_campaigns (junk from the runaway sweep) in time-window
 batches. Children cascade via FK. Windows shrink on failure/timeout."""
-import urllib.request, urllib.error, time, sys
+import urllib.request, urllib.error, time, sys, os
 from datetime import datetime, timedelta, timezone
 
+# Locate backend/.env relative to this script (scripts/ops/ → repo root) so
+# the script works from ANY working directory.
+ENV_PATH = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', '..', 'backend', '.env'))
+if not os.path.exists(ENV_PATH):
+    sys.exit(f"backend/.env not found at {ENV_PATH}")
+
 env = {}
-with open('backend/.env') as f:
+with open(ENV_PATH) as f:
     for line in f:
         line = line.strip()
         if line and not line.startswith('#') and '=' in line:
@@ -38,9 +45,9 @@ def count():
 start_total = count()
 print(f"START: {start_total} campaigns", flush=True)
 
-# Sweep windows: from before the import (June 14) to tomorrow.
+# Sweep windows: from before the import (June 14) to past the last sweep run.
 cur = datetime(2026, 6, 14, tzinfo=timezone.utc)
-end = datetime(2026, 7, 3, tzinfo=timezone.utc)
+end = datetime(2026, 7, 4, tzinfo=timezone.utc)
 window = timedelta(hours=6)
 
 def ts(dt):
