@@ -11,6 +11,7 @@ import EmptyState from '@/components/molecules/EmptyState';
 import { useEmails } from '@/domains/emails';
 import type { EmailLog } from '@/domains/emails';
 import { EMAIL_TYPE_COLORS, EMAIL_STATUS_COLORS, EMAIL_TYPE_LABELS } from '@/lib/constants';
+import DOMPurify from 'dompurify';
 
 export default function Emails() {
   const [search, setSearch] = useState('');
