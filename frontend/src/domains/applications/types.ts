@@ -82,7 +82,6 @@ export interface ApplicationDetail {
   pipeline_stage: PipelineStage;
   sub_status: string | null;
   assigned_recruiter_id: string | null;
-  status: string;
   ai_screening_score: number | { score: number; explanation?: string } | null;
   ai_screening_result: ScreeningResult | null;
   recruiter_notes: string | null;
