@@ -65,11 +65,17 @@ for n in retell("GET", "/list-phone-numbers") or []:
     print(f"phone {n.get('phone_number')}: inbound={n.get('inbound_agent_id')} outbound={n.get('outbound_agent_id')}")
 print(f"protected (phone-bound): {len(phone_bound)}")
 
-# 3. Sweep
+# 3. Sweep (list-agents returns one row per agent VERSION — dedupe by id)
 protected = ours | phone_bound
 agents = retell("GET", "/list-agents")
-strays = [a for a in agents if a["agent_id"] not in protected]
-print(f"\nRetell agents total: {len(agents)}; strays: {len(strays)}")
+seen: set = set()
+strays = []
+for a in agents:
+    if a["agent_id"] in protected or a["agent_id"] in seen:
+        continue
+    seen.add(a["agent_id"])
+    strays.append(a)
+print(f"\nRetell agent rows: {len(agents)}; distinct stray agents: {len(strays)}")
 for a in strays:
     label = f"{a.get('agent_name','?')} ({a['agent_id']})"
     if DELETE:

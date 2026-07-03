@@ -73,7 +73,8 @@ for cid, email in victims:
 print(f"candidates deleted: {deleted}")
 
 # ── jobs ──
-res = api("GET", "/api/jobs?days=all&limit=100&search=Web Developer", token)
+from urllib.parse import quote
+res = api("GET", f"/api/jobs?days=all&limit=100&search={quote('Web Developer')}", token)
 jobs = [j for j in (res["data"] if res else []) if j.get("title") in TEST_JOB_TITLES and not j.get("ceipal_job_id")]
 print(f"test jobs found (non-CEIPAL '{TEST_JOB_TITLES}'): {len(jobs)}")
 for j in jobs:
