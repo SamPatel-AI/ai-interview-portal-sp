@@ -734,8 +734,11 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
         ? JSON.parse(req.body.toString())
         : req.body;
 
-    const fromNumber = body.from_number || body.caller_number || '';
-    const toNumber = body.to_number || body.called_number || '';
+    // Retell nests the payload under `call_inbound`; older payloads had the
+    // numbers at the top level, so fall back to those for compatibility.
+    const inbound = body.call_inbound || body;
+    const fromNumber = inbound.from_number || body.from_number || body.caller_number || '';
+    const toNumber = inbound.to_number || body.to_number || body.called_number || '';
 
     logger.info(`Inbound call from ${fromNumber} to ${toNumber}`);
 
@@ -790,16 +793,21 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
       // Unknown caller — use default agent or reject
       if (phoneAgent?.retell_agent_id) {
         res.json({
-          agent_id: phoneAgent.retell_agent_id,
-          retell_llm_dynamic_variables: {
-            candidate_name: 'there',
-            call_context: 'This is an inbound call from an unknown number. Introduce yourself and ask who is calling.',
+          call_inbound: {
+            override_agent_id: phoneAgent.retell_agent_id,
+            dynamic_variables: {
+              candidate_name: 'there',
+              call_context: 'This is an inbound call from an unknown number. Introduce yourself and ask who is calling.',
+            },
           },
         });
         return;
       }
 
-      res.status(404).json({ error: 'No agent configured for this number' });
+      // Reject: Retell treats non-2xx as failure and retries, so answer 200
+      // with no override_agent_id to decline the call cleanly.
+      logger.warn(`Inbound call from ${fromNumber}: no candidate match and no agent configured for ${toNumber} — rejecting`);
+      res.json({ call_inbound: {} });
       return;
     }
 
@@ -872,7 +880,8 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
     const agentId = agent?.retell_agent_id || phoneAgent?.retell_agent_id;
 
     if (!agentId) {
-      res.status(404).json({ error: 'No agent available for this candidate' });
+      logger.warn(`Inbound call from ${fromNumber}: matched candidate ${candidate.id} but no agent available — rejecting`);
+      res.json({ call_inbound: {} });
       return;
     }
 
@@ -911,12 +920,14 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
 
     // Respond to Retell with agent routing
     res.json({
-      agent_id: agentId,
-      retell_llm_dynamic_variables: dynamicVars,
-      metadata: {
-        call_id: callRecord?.id,
-        candidate_id: candidate.id,
-        org_id: candidate.org_id,
+      call_inbound: {
+        override_agent_id: agentId,
+        dynamic_variables: dynamicVars,
+        metadata: {
+          call_id: callRecord?.id,
+          candidate_id: candidate.id,
+          org_id: candidate.org_id,
+        },
       },
     });
   } catch (err) {
