@@ -145,11 +145,11 @@ describe('buildInboundBeginMessage', () => {
     const msg = buildInboundBeginMessage({});
     expect(msg).toContain('May I ask who');
   });
-  it('acknowledges a missed-call callback', () => {
+  it('acknowledges a missed-call callback as a scheduled interview', () => {
     const msg = buildInboundBeginMessage({ candidateFirstName: 'Sam', jobTitle: 'Full Stack Developer', missedCall: true });
     expect(msg).toContain('Sam');
     expect(msg).toContain('tried to reach you');
-    expect(msg).toContain('your Full Stack Developer interview');
+    expect(msg).toContain('scheduled Full Stack Developer interview');
   });
   it('prefers the interrupted-call opener over missed-call', () => {
     const msg = buildInboundBeginMessage({ candidateFirstName: 'Sam', missedCall: true, interruptedCall: true });
@@ -177,5 +177,17 @@ describe('buildInboundContext — general inbound', () => {
     const vars = buildInboundContext({ candidate: { first_name: 'Sam', last_name: 'Patel', email: 's@p.com' }, missedCall: { transcript: '' } } as any);
     expect(vars.call_context).toContain('calling back');
     expect(vars.call_context).not.toContain('The candidate called us');
+  });
+  it('missed-call context offers a now-or-reschedule choice and forbids jumping in', () => {
+    const vars = buildInboundContext({ candidate: { first_name: 'Sam', last_name: 'Patel', email: 's@p.com' }, job: { title: 'Dev' }, missedCall: { transcript: '' } } as any);
+    expect(vars.call_context).toContain('SCHEDULED interview');
+    expect(vars.call_context).toContain('Do NOT jump into interview questions');
+    expect(vars.call_context).toContain('right now');
+    expect(vars.call_context).toContain('RESCHEDULE');
+  });
+  it('interrupted resume wins over missed-call context', () => {
+    const vars = buildInboundContext({ candidate: { first_name: 'Sam', last_name: 'Patel', email: 's@p.com' }, missedCall: { transcript: '' }, interruptedCall: { transcript: 'earlier convo' } } as any);
+    expect(vars.call_context).toContain('interrupted');
+    expect(vars.call_context).not.toContain('SCHEDULED interview');
   });
 });
