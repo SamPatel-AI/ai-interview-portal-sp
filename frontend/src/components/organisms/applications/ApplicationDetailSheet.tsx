@@ -85,7 +85,9 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
   const completedCall = app?.calls?.find(c => c.status === 'completed');
   const invitationEmail = app?.email_logs?.find(e => e.type === 'invitation');
   const hasInvitation = !!invitationEmail;
-  const currentStep = app ? getStepIndex(app.status) : 0;
+  const stage = app?.pipeline_stage;
+  const subBadge = app ? subStatusBadge(app as unknown as import('@/domains/applications').Application) : null;
+  const currentIdx = stage ? stageIndex(stage) : -1;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
