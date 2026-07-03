@@ -840,32 +840,36 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
       return;
     }
 
-    // Check for recent missed outbound call (callback within 2 hours)
+    // Check for a missed outbound call (scheduled slot we couldn't reach them
+    // for). 7-day window: candidates often call back hours or days later.
     const { data: missedCall } = await supabaseAdmin
       .from('calls')
       .select('id, application_id, ai_agent_id, transcript, context_passed')
       .eq('candidate_id', candidate.id)
       .eq('direction', 'outbound')
       .in('status', ['no_answer', 'voicemail'])
-      .gte('created_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
-    // Check for interrupted calls to resume
+    // Check for interrupted calls to resume. 2-hour window: mid-interview
+    // resumption only makes sense for a near-instant callback — after that,
+    // treat them like a missed-call callback / fresh inbound instead.
     const { data: interruptedCall } = await supabaseAdmin
       .from('calls')
       .select('id, application_id, ai_agent_id, transcript, context_passed')
       .eq('candidate_id', candidate.id)
       .eq('status', 'interrupted')
+      .gte('created_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
     // Determine which application/job/agent context to use
-    // Priority: missed call context > interrupted call context > latest active application
-    const contextSourceAppId = missedCall?.application_id
-      || interruptedCall?.application_id
+    // Priority: interrupted resume (most specific) > missed call > latest active application
+    const contextSourceAppId = interruptedCall?.application_id
+      || missedCall?.application_id
       || null;
 
     let application: any = null;

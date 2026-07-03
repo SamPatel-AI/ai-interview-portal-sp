@@ -144,17 +144,8 @@ export function buildInboundContext(ctx: InboundContext): Record<string, string>
     '',
   );
 
-  if (ctx.missedCall) {
-    // Candidate is calling back after we couldn't reach them
-    contextParts.push(
-      `CONTEXT: We tried calling this candidate earlier for their ${vars.job_title} interview but couldn't reach them. They are now calling back.`,
-      `Acknowledge this naturally: "I believe we tried reaching you earlier for your ${vars.job_title} interview — shall we go ahead now?"`,
-      '',
-    );
-  }
-
   if (ctx.interruptedCall) {
-    // Resuming a previously interrupted call
+    // Scenario: interview dropped mid-call and they called right back — resume
     contextParts.push(
       'IMPORTANT: This candidate is calling back after a previous call was interrupted.',
       'Previous conversation:',
@@ -165,9 +156,19 @@ export function buildInboundContext(ctx: InboundContext): Record<string, string>
       'Do NOT repeat questions already asked in the previous conversation.',
       '',
     );
-  }
-
-  if (!ctx.missedCall && !ctx.interruptedCall) {
+  } else if (ctx.missedCall) {
+    // Scenario: they missed their scheduled interview slot and are calling back
+    contextParts.push(
+      `CONTEXT: This candidate had a SCHEDULED interview call for the ${vars.job_title} role. We called at the scheduled time but could not reach them. They are calling back now — possibly well after the slot.`,
+      `Do NOT jump into interview questions. Follow this order:`,
+      `1. Confirm their identity first.`,
+      `2. Acknowledge the missed call: "We tried to reach you for your scheduled ${vars.job_title} interview and couldn't get through."`,
+      `3. Offer them the choice: "We can do the interview right now if you have about fifteen minutes — or if now isn't good, you can pick a new time with the booking link we emailed you."`,
+      `4. If they choose NOW: proceed with the normal interview flow.`,
+      `5. If they choose to RESCHEDULE (or hesitate): tell them to use the booking link in their email, or that the recruiting team will follow up with a fresh link. Thank them warmly and end the call. Do not pressure them.`,
+      '',
+    );
+  } else {
     // General inbound — the candidate called us out of the blue
     contextParts.push(
       `CONTEXT: The candidate called us — we did NOT call them. Do not speak as if you placed this call.`,
@@ -205,7 +206,7 @@ export function buildInboundBeginMessage(ctx: {
     return `Hi, thanks for calling back — am I speaking with ${name}? Sorry about the earlier disconnection; we can pick up right where we left off.`;
   }
   if (ctx.missedCall) {
-    return `Hi, thanks for calling back — am I speaking with ${name}? We tried to reach you a little earlier about ${jobPhrase}.`;
+    return `Hi, thanks for calling back — am I speaking with ${name}? We tried to reach you for your scheduled ${ctx.jobTitle?.trim() ? ctx.jobTitle.trim() + ' ' : ''}interview and couldn't get through.`;
   }
   return `Hi, you've reached Saanvi Technology's interview line — am I speaking with ${name}? If you're calling about ${jobPhrase}, we can go ahead right now if you're ready.`;
 }
