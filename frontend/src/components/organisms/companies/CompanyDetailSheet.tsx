@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest, ApiResponse } from '@/lib/api';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -10,6 +8,8 @@ import {
   DollarSign, Hash, ChevronDown, ChevronRight, Users,
 } from 'lucide-react';
 import JobDetailSheet from '@/components/organisms/jobs/JobDetailSheet';
+import { useCompany } from '@/domains/companies';
+import { JOB_STATUS_COLORS_BORDER, EMPLOYMENT_TYPE_LABELS } from '@/lib/constants';
 
 interface CompanyJob {
   id: string;
@@ -47,20 +47,6 @@ interface CompanyDetail {
   ai_agents: CompanyAgent[];
 }
 
-const statusColors: Record<string, string> = {
-  open: 'bg-success/10 text-success border-success/20',
-  closed: 'bg-destructive/10 text-destructive border-destructive/20',
-  on_hold: 'bg-warning/10 text-warning border-warning/20',
-  filled: 'bg-info/10 text-info border-info/20',
-};
-
-const employmentLabels: Record<string, string> = {
-  full_time: 'Full Time',
-  contract: 'Contract',
-  c2c: 'C2C',
-  w2: 'W2',
-};
-
 interface Props {
   companyId: string | null;
   open: boolean;
@@ -72,13 +58,9 @@ export default function CompanyDetailSheet({ companyId, open, onOpenChange }: Pr
   const [drillJobId, setDrillJobId] = useState<string | null>(null);
   const [drillOpen, setDrillOpen] = useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['company-detail', companyId],
-    queryFn: () => apiRequest<ApiResponse<CompanyDetail>>(`/api/companies/${companyId}`),
-    enabled: !!companyId && open,
-  });
+  const { data, isLoading } = useCompany(open ? companyId : null);
 
-  const company = data?.data;
+  const company = data?.data as unknown as CompanyDetail | undefined;
   const jobs = company?.jobs ?? [];
   const agents = company?.ai_agents ?? [];
   const openJobs = jobs.filter(j => j.status === 'open');
@@ -87,6 +69,7 @@ export default function CompanyDetailSheet({ companyId, open, onOpenChange }: Pr
   const toggleExpand = (id: string) => {
     setExpandedJobId(prev => prev === id ? null : id);
   };
+
 
   return (
     <>
