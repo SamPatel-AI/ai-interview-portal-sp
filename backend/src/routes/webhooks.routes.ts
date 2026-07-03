@@ -810,7 +810,10 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
       }
     }
 
-    const phoneAgent = (phoneConfig?.ai_agents as any[])?.[0];
+    // PostgREST returns a to-one embed as an object (an array only for
+    // to-many), so handle both shapes.
+    const phoneAgentRel = phoneConfig?.ai_agents as any;
+    const phoneAgent = Array.isArray(phoneAgentRel) ? phoneAgentRel[0] : phoneAgentRel;
 
     if (!candidate) {
       // Unknown caller — use default agent or reject
@@ -901,6 +904,19 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
       application = app;
       job = (app?.jobs as any);
       agent = (job?.ai_agents as any);
+    }
+
+    // Fall back to the org's default active agent — same rule outbound calls
+    // use (resolveAgent) — so jobs without an assigned agent still route.
+    if (!agent?.retell_agent_id) {
+      const { data: defaultAgent } = await supabaseAdmin
+        .from('ai_agents')
+        .select('id, retell_agent_id, interview_style, greeting_template, closing_template, evaluation_criteria, system_prompt')
+        .eq('org_id', candidate.org_id)
+        .eq('is_default', true)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (defaultAgent) agent = defaultAgent;
     }
 
     const agentId = agent?.retell_agent_id || phoneAgent?.retell_agent_id;
