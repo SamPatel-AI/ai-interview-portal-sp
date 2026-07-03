@@ -167,11 +167,47 @@ export function buildInboundContext(ctx: InboundContext): Record<string, string>
     );
   }
 
+  if (!ctx.missedCall && !ctx.interruptedCall) {
+    // General inbound — the candidate called us out of the blue
+    contextParts.push(
+      `CONTEXT: The candidate called us — we did NOT call them. Do not speak as if you placed this call.`,
+      `They have an application for the ${vars.job_title} role. After confirming their identity, ask whether they'd like to do their screening interview right now.`,
+      `If yes, proceed with the normal interview flow. If it's a bad time, tell them the recruiting team will send a scheduling link, thank them, and end the call politely.`,
+      '',
+    );
+  }
+
   if (contextParts.length > 0) {
     vars.call_context = contextParts.join('\n');
   }
 
   return vars;
+}
+
+/**
+ * The agent's EXACT first utterance for an inbound call. Overrides the
+ * agent-level begin_message (written for outbound calls — "is now a good
+ * time for your interview?" sounds wrong when the candidate dialed us).
+ */
+export function buildInboundBeginMessage(ctx: {
+  candidateFirstName?: string;
+  jobTitle?: string | null;
+  missedCall?: boolean;
+  interruptedCall?: boolean;
+}): string {
+  const name = ctx.candidateFirstName?.trim();
+  if (!name) {
+    return "Hi, you've reached Saanvi Technology's recruiting line. May I ask who's calling?";
+  }
+  // Noun phrase: "your Software Engineer interview" / "your interview"
+  const jobPhrase = ctx.jobTitle?.trim() ? `your ${ctx.jobTitle.trim()} interview` : 'your interview';
+  if (ctx.interruptedCall) {
+    return `Hi, thanks for calling back — am I speaking with ${name}? Sorry about the earlier disconnection; we can pick up right where we left off.`;
+  }
+  if (ctx.missedCall) {
+    return `Hi, thanks for calling back — am I speaking with ${name}? We tried to reach you a little earlier about ${jobPhrase}.`;
+  }
+  return `Hi, you've reached Saanvi Technology's interview line — am I speaking with ${name}? If you're calling about ${jobPhrase}, we can go ahead right now if you're ready.`;
 }
 
 /**

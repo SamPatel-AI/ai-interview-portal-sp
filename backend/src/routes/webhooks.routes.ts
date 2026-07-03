@@ -4,7 +4,8 @@ import { webhookLimiter } from '../middleware/rateLimiter';
 import { logger } from '../utils/logger';
 import { phonesMatch } from '../utils/phone';
 import { scheduleCallRetry } from '../jobs/callRetry.job';
-import { buildInboundContext } from '../utils/retellPromptBuilder';
+import { buildInboundContext, buildInboundBeginMessage } from '../utils/retellPromptBuilder';
+import { sendMissedCallEmail } from '../services/email.service';
 import { verifyRetellSignature, requireWebhookSecret, verifyCalSignature } from '../middleware/webhookAuth';
 import { cancelBooking } from '../services/cal.service';
 import { notifyBookingIssue } from '../services/notification.service';
@@ -542,15 +543,17 @@ router.post('/retell/post-call', verifyRetellSignature, async (req: Request, res
 
     logger.info(`Retell webhook: ${event} for call ${retellCallId}`);
 
-    // Find the call in our database
-    const { data: callRecord, error } = await supabaseAdmin
+    // Find the call in our database. Inbound calls are inserted before the
+    // Retell call ID exists, so fall back to the call_id we put in metadata.
+    const { data: foundCall, error } = await supabaseAdmin
       .from('calls')
       .select('id, org_id, application_id, candidate_id')
       .eq('retell_call_id', retellCallId)
       .single();
 
+    let callRecord = foundCall;
+
     if (error || !callRecord) {
-      // Try matching by metadata
       const metadata = call.metadata;
       if (metadata?.call_id) {
         const { data: metaCall } = await supabaseAdmin
@@ -564,7 +567,7 @@ router.post('/retell/post-call', verifyRetellSignature, async (req: Request, res
           res.json({ received: true });
           return;
         }
-        Object.assign(callRecord ?? {}, metaCall);
+        callRecord = metaCall;
       } else {
         logger.warn(`Call not found for retell_call_id: ${retellCallId}`);
         res.json({ received: true });
@@ -622,6 +625,22 @@ router.post('/retell/post-call', verifyRetellSignature, async (req: Request, res
         .eq('id', callRecord!.id);
     }
 
+    // Tell the candidate we missed them: immediately for voicemail (no
+    // auto-redial happens), and for no_answer/failed only once redials are
+    // exhausted below. Gated to call_ended so call_analyzed doesn't re-send.
+    const notifyMissedCall = () => {
+      if (event !== 'call_ended') return;
+      sendMissedCallEmail({
+        candidateId: callRecord!.candidate_id,
+        applicationId: callRecord!.application_id,
+        orgId: callRecord!.org_id,
+      }).catch((err) => logger.error('Missed-call email failed:', err));
+    };
+
+    if (status === 'voicemail') {
+      notifyMissedCall();
+    }
+
     // Auto-redial no-answer / failed calls within the slot, up to 3 total attempts.
     // After that the call is left as failed so it surfaces for manual recruiter action.
     if (status === 'no_answer' || status === 'failed') {
@@ -637,6 +656,7 @@ router.post('/retell/post-call', verifyRetellSignature, async (req: Request, res
         logger.info(`Auto-redial scheduled for application ${appId} (attempt ${(attempts ?? 0) + 1}/${MAX_ATTEMPTS})`);
       } else {
         logger.info(`Application ${appId} exhausted ${MAX_ATTEMPTS} call attempts — left as failed for recruiter action`);
+        notifyMissedCall();
       }
     }
 
@@ -758,10 +778,13 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
       // Fetch candidates with phone numbers for this org, match in JS for reliability
       const { data: orgCandidates } = await supabaseAdmin
         .from('candidates')
-        .select('id, org_id, first_name, last_name, email, phone')
+        .select('id, org_id, first_name, last_name, email, phone, created_at')
         .eq('org_id', orgId)
-        .not('phone', 'is', null);
+        .not('phone', 'is', null)
+        .order('created_at', { ascending: false });
 
+      // Newest-first so that when several candidates share a phone number
+      // (re-used test numbers, family members), the most recent profile wins.
       const matches = (orgCandidates || []).filter(c => c.phone && phonesMatch(c.phone, fromNumber));
 
       if (matches.length === 1) {
@@ -798,6 +821,9 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
             dynamic_variables: {
               candidate_name: 'there',
               call_context: 'This is an inbound call from an unknown number. Introduce yourself and ask who is calling.',
+            },
+            agent_override: {
+              retell_llm: { begin_message: buildInboundBeginMessage({}) },
             },
           },
         });
@@ -918,7 +944,8 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
       .select('id')
       .single();
 
-    // Respond to Retell with agent routing
+    // Respond to Retell with agent routing. The begin_message override makes
+    // the agent open like someone RECEIVING a call, not placing one.
     res.json({
       call_inbound: {
         override_agent_id: agentId,
@@ -927,6 +954,16 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
           call_id: callRecord?.id,
           candidate_id: candidate.id,
           org_id: candidate.org_id,
+        },
+        agent_override: {
+          retell_llm: {
+            begin_message: buildInboundBeginMessage({
+              candidateFirstName: candidate.first_name,
+              jobTitle: job?.title,
+              missedCall: !!missedCall,
+              interruptedCall: !!interruptedCall,
+            }),
+          },
         },
       },
     });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileSystemPrompt, compileBeginMessage, buildSampleVariables, buildDynamicVariables, buildInboundContext } from './retellPromptBuilder';
+import { compileSystemPrompt, compileBeginMessage, buildSampleVariables, buildDynamicVariables, buildInboundContext, buildInboundBeginMessage } from './retellPromptBuilder';
 import type { BuilderConfig } from '../types';
 
 const fullConfig: BuilderConfig = {
@@ -137,5 +137,45 @@ describe('compileBeginMessage', () => {
   it('uses a configured greeting verbatim', () => {
     const cfg = { ...fullConfig, greeting: '  Hi, this is Grace from Saanvi — is this {{candidate_first_name}}?  ' };
     expect(compileBeginMessage(cfg)).toBe('Hi, this is Grace from Saanvi — is this {{candidate_first_name}}?');
+  });
+});
+
+describe('buildInboundBeginMessage', () => {
+  it('asks who is calling when the caller is unknown', () => {
+    const msg = buildInboundBeginMessage({});
+    expect(msg).toContain('May I ask who');
+  });
+  it('acknowledges a missed-call callback', () => {
+    const msg = buildInboundBeginMessage({ candidateFirstName: 'Sam', jobTitle: 'Full Stack Developer', missedCall: true });
+    expect(msg).toContain('Sam');
+    expect(msg).toContain('tried to reach you');
+    expect(msg).toContain('your Full Stack Developer interview');
+  });
+  it('prefers the interrupted-call opener over missed-call', () => {
+    const msg = buildInboundBeginMessage({ candidateFirstName: 'Sam', missedCall: true, interruptedCall: true });
+    expect(msg).toContain('pick up right where we left off');
+  });
+  it('receives a fresh inbound call without sounding outbound', () => {
+    const msg = buildInboundBeginMessage({ candidateFirstName: 'Sam', jobTitle: 'Full Stack Developer' });
+    expect(msg).toContain("you've reached");
+    expect(msg).toContain('your Full Stack Developer interview');
+  });
+  it('avoids "the your interview interview" when job title is missing', () => {
+    const msg = buildInboundBeginMessage({ candidateFirstName: 'Sam' });
+    expect(msg).toContain('your interview');
+    expect(msg).not.toContain('the your');
+  });
+});
+
+describe('buildInboundContext — general inbound', () => {
+  it('tells the agent the candidate called us when there is no missed/interrupted call', () => {
+    const vars = buildInboundContext({ candidate: { first_name: 'Sam', last_name: 'Patel', email: 's@p.com' }, job: { title: 'Dev' } } as any);
+    expect(vars.call_context).toContain('The candidate called us');
+    expect(vars.call_context).toContain('Do not speak as if you placed this call');
+  });
+  it('keeps the missed-call context when a missed call exists', () => {
+    const vars = buildInboundContext({ candidate: { first_name: 'Sam', last_name: 'Patel', email: 's@p.com' }, missedCall: { transcript: '' } } as any);
+    expect(vars.call_context).toContain('calling back');
+    expect(vars.call_context).not.toContain('The candidate called us');
   });
 });
