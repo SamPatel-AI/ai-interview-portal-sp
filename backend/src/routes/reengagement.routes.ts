@@ -5,8 +5,49 @@ import { authenticate, requireRole } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import { createCampaign } from '../services/reengagement.service';
 import { reengagementQueue } from '../jobs/reengagement.job';
+import { verifyOptOutToken } from '../utils/optOut';
 
 const router = Router();
+
+// ─── GET /api/reengagement/opt-out — PUBLIC unsubscribe ────
+// Clicked from a re-engagement email, so it must work with no login. The
+// HMAC token (utils/optOut.ts) proves the link came from an email we sent
+// for exactly this candidate. Mounted BEFORE the authenticate middleware.
+router.get('/opt-out', async (req: Request, res: Response, _next: NextFunction) => {
+  const { c: candidateId, t: token } = req.query as { c?: string; t?: string };
+
+  const page = (title: string, message: string) =>
+    `<!doctype html><html><body style="font-family:Arial,sans-serif;max-width:480px;margin:80px auto;text-align:center;color:#222">
+      <h2>${title}</h2><p>${message}</p></body></html>`;
+
+  if (!candidateId || !token || !verifyOptOutToken(candidateId, token)) {
+    res.status(400).send(page('Invalid link', 'This unsubscribe link is invalid or incomplete.'));
+    return;
+  }
+
+  const { data: candidate, error } = await supabaseAdmin
+    .from('candidates')
+    .update({ reengagement_opted_out: true })
+    .eq('id', candidateId)
+    .select('id, org_id')
+    .single();
+
+  if (error || !candidate) {
+    res.status(404).send(page('Not found', 'We could not find your record. You may already have been removed.'));
+    return;
+  }
+
+  await supabaseAdmin.from('activity_log').insert({
+    org_id: candidate.org_id,
+    entity_type: 'candidate',
+    entity_id: candidate.id,
+    action: 'reengagement_opted_out',
+    details: { via: 'email_unsubscribe_link' },
+  });
+
+  logger.info(`Candidate ${candidateId} opted out of re-engagement via email link`);
+  res.send(page("You're unsubscribed", 'You will no longer receive job re-engagement emails from us.'));
+});
 
 router.use(authenticate);
 router.use(requireRole('admin', 'recruiter'));

@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../config/database';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { Candidate, EmailType } from '../types';
+import { optOutUrl } from '../utils/optOut';
 
 // ─── SMTP Transporter (created lazily) ────────────────────
 
@@ -370,7 +371,7 @@ export async function sendReEngagementEmail(
   companyName: string
 ): Promise<void> {
   const candidateName = `${candidate.first_name} ${candidate.last_name}`.trim();
-  const template = reEngagementTemplate(candidateName, jobTitle, jobDescription, companyName);
+  const template = reEngagementTemplate(candidateName, jobTitle, jobDescription, companyName, optOutUrl(candidate.id));
 
   await sendEmail({
     candidateId: candidate.id,
@@ -385,11 +386,18 @@ function reEngagementTemplate(
   candidateName: string,
   jobTitle: string,
   jobDescription: string,
-  companyName: string
+  companyName: string,
+  unsubscribeUrl: string | null = null
 ): { subject: string; body: string } {
   const briefDescription = jobDescription.length > 200
     ? jobDescription.substring(0, 200) + '...'
     : jobDescription;
+
+  // Unsolicited outreach must carry a working one-click opt-out (CAN-SPAM /
+  // TCPA hygiene). Null only when PUBLIC_API_URL is unset (local dev).
+  const unsubscribeFooter = unsubscribeUrl
+    ? `\n\n  <p style="font-size: 12px; color: #888; margin-top: 24px;">Don't want these emails? <a href="${unsubscribeUrl}" style="color: #888;">Unsubscribe</a> and we won't contact you about future openings.</p>`
+    : '';
 
   return {
     subject: `New Opportunity: ${jobTitle} at ${companyName}`,
@@ -407,7 +415,7 @@ function reEngagementTemplate(
   <p>We look forward to hearing from you.</p>
 
   <p>Best regards,<br>
-  <strong>Saanvi Technology Recruitment Team</strong></p>
+  <strong>Saanvi Technology Recruitment Team</strong></p>${unsubscribeFooter}
 </div>`,
   };
 }

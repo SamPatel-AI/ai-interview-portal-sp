@@ -24,7 +24,11 @@ const createCandidateSchema = z.object({
   source: z.string().optional(),
 });
 
-const updateCandidateSchema = createCandidateSchema.partial();
+const updateCandidateSchema = createCandidateSchema.partial().extend({
+  // Manual opt-out toggle for recruiters (the email unsubscribe link is the
+  // candidate-facing path; this covers phone/email requests).
+  reengagement_opted_out: z.boolean().optional(),
+});
 
 // ─── GET /api/candidates ───────────────────────────────────
 
@@ -188,6 +192,62 @@ router.post(
         success: true,
         data: { resume_url: filePath, public_url: publicUrl.publicUrl },
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── DELETE /api/candidates/:id ─────────────────────────────
+// Right-to-erasure: permanently removes the candidate, their stored resume
+// files, and (via FK cascades) applications, calls, evaluations, email logs,
+// portal tokens, and re-engagement rows. Admin only — this is irreversible.
+
+router.delete(
+  '/:id',
+  requireRole('admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const candidateId = req.params.id;
+
+      const { data: candidate, error: candErr } = await supabaseAdmin
+        .from('candidates')
+        .select('id')
+        .eq('id', candidateId)
+        .eq('org_id', req.user!.org_id)
+        .single();
+
+      if (candErr || !candidate) throw new AppError(404, 'Candidate not found');
+
+      // Storage doesn't cascade — remove every file under the candidate's prefix.
+      const prefix = `${req.user!.org_id}/${candidateId}`;
+      const { data: files } = await supabaseAdmin.storage.from('resumes').list(prefix);
+      if (files?.length) {
+        const paths = files.map((f) => `${prefix}/${f.name}`);
+        const { error: rmErr } = await supabaseAdmin.storage.from('resumes').remove(paths);
+        if (rmErr) logger.error(`Failed to remove resume files for ${candidateId}:`, rmErr);
+      }
+
+      const { error: delErr } = await supabaseAdmin
+        .from('candidates')
+        .delete()
+        .eq('id', candidateId)
+        .eq('org_id', req.user!.org_id);
+
+      if (delErr) throw new AppError(500, `Failed to delete candidate: ${delErr.message}`);
+
+      // Log the erasure by id only — the point is to stop holding their PII.
+      await supabaseAdmin.from('activity_log').insert({
+        org_id: req.user!.org_id,
+        user_id: req.user!.id,
+        entity_type: 'candidate',
+        entity_id: candidateId,
+        action: 'deleted',
+        details: { reason: 'erasure', files_removed: files?.length ?? 0 },
+      });
+
+      logger.info(`Candidate ${candidateId} deleted (erasure) by user ${req.user!.id}`);
+      res.json({ success: true });
     } catch (err) {
       next(err);
     }
