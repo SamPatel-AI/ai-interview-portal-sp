@@ -1,6 +1,5 @@
 export const ROUTES = {
   LOGIN: '/login',
-  SIGNUP: '/signup',
   DASHBOARD: '/dashboard',
   CANDIDATES: '/candidates',
   JOBS: '/jobs',
@@ -14,3 +13,4 @@ export const ROUTES = {
   ACTIVITY: '/activity',
   SETTINGS: '/settings',
 } as const;
+
