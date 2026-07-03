@@ -233,7 +233,7 @@ function JobCard({
                 {locationParts.join(', ')}
               </span>
             )}
-            <span>{employmentLabels[job.employment_type] || job.employment_type}</span>
+            <span>{EMPLOYMENT_TYPE_LABELS[job.employment_type] || job.employment_type}</span>
             {job.tax_terms && <span>{job.tax_terms}</span>}
           </div>
         </div>
@@ -242,7 +242,7 @@ function JobCard({
             <Users className="h-3 w-3" />
             {job.applications_count}
           </span>
-          <Badge variant="outline" className={`text-xs capitalize ${statusColors[job.status] || ''}`}>
+          <Badge variant="outline" className={`text-xs capitalize ${JOB_STATUS_COLORS_BORDER[job.status] || ''}`}>
             {job.status?.replace('_', ' ')}
           </Badge>
         </div>
