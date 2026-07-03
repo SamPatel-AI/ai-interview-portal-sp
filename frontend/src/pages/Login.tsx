@@ -102,10 +102,7 @@ export default function Login() {
             </Button>
 
             <p className="text-center text-sm text-muted-foreground mt-6">
-              Don't have an account?{' '}
-              <Link to="/signup" className="text-primary font-medium hover:underline">
-                Sign up
-              </Link>
+              Need an account? Ask your administrator for an invitation.
             </p>
           </CardContent>
         </Card>
@@ -113,3 +110,4 @@ export default function Login() {
     </div>
   );
 }
+
