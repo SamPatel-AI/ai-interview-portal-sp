@@ -22,6 +22,12 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+        env:
+          # config/env.ts hard-requires these at module load (process.exit
+          # without them). Tests that transitively import it need placeholders;
+          # nothing in the unit suite talks to a real Supabase.
+          SUPABASE_URL: https://ci-placeholder.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-key
 
   frontend:
     runs-on: ubuntu-latest
