@@ -59,6 +59,3 @@ export function useUpdateSchedulingConfig() {
   });
 }
 
-// Aliases matching the new naming convention
-export const useSchedulingSettings = useSchedulingConfig;
-export const useUpdateSchedulingSettings = useUpdateSchedulingConfig;

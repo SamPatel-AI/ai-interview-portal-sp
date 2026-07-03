@@ -104,9 +104,8 @@ export function useTestCallAgent() {
       service.testCallAgent(id, phone_number),
     onSuccess: (_d, vars) =>
       toast({ title: `Calling ${vars.phone_number} now — pick up to hear your agent.` }),
-    onError: (err: Error & { message?: string }) => {
-      const msg = /409/.test(err.message ?? '') ? 'Save the agent first, then test.' : err.message;
-      toast({ title: 'Test call failed', description: msg, variant: 'destructive' });
+    onError: (err: Error) => {
+      toast({ title: 'Test call failed', description: err.message, variant: 'destructive' });
     },
   });
 }
