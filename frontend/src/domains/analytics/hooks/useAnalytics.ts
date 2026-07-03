@@ -20,13 +20,6 @@ export function useRecruiterStats(id: string | null) {
   });
 }
 
-export function useRecruiterWorkloads() {
-  return useQuery({
-    queryKey: analyticsKeys.recruiters(),
-    queryFn: () => service.fetchRecruiterWorkloads(),
-    staleTime: STALE.MEDIUM,
-  });
-}
 
 export function useRecruiterWorkload() {
   return useQuery({

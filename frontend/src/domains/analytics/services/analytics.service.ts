@@ -9,9 +9,6 @@ export async function fetchRecruiterStats(id: string) {
   return apiRequest<ApiResponse<RecruiterStats>>(`/api/analytics/recruiter/${id}`);
 }
 
-export async function fetchRecruiterWorkloads() {
-  return apiRequest<ApiResponse<RecruiterWorkload[]>>('/api/analytics/recruiters');
-}
 
 export async function getRecruiterWorkload(): Promise<RecruiterWorkload[]> {
   const res = await apiRequest<ApiResponse<RecruiterWorkload[]>>('/api/analytics/recruiters');

@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Clock, CalendarIcon, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useSchedulingSettings, useUpdateSchedulingSettings } from '@/domains/settings';
+import { useSchedulingConfig, useUpdateSchedulingConfig } from '@/domains/settings';
 import type { SchedulingConfig, DayKey, DayHours } from '@/domains/settings';
 
 const DAYS: { key: DayKey; label: string }[] = [
@@ -64,8 +64,8 @@ const DEFAULT_CONFIG: SchedulingConfig = {
 };
 
 export default function SchedulingSettings() {
-  const { data: response, isLoading } = useSchedulingSettings();
-  const update = useUpdateSchedulingSettings();
+  const { data: response, isLoading } = useSchedulingConfig();
+  const update = useUpdateSchedulingConfig();
 
   const loaded: SchedulingConfig | null = useMemo(() => {
     const d = (response as any)?.data;

@@ -1,4 +1,4 @@
-export { useOverview, useRecruiterStats, useRecruiterWorkloads, useRecruiterWorkload, useJobStats, useAgentStats, useExportReport } from './hooks/useAnalytics';
+export { useOverview, useRecruiterStats, useRecruiterWorkload, useJobStats, useAgentStats, useExportReport } from './hooks/useAnalytics';
 export { analyticsKeys } from './hooks/queryKeys';
 export type {
   OverviewStats,
