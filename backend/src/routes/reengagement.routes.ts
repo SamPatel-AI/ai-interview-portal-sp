@@ -3,22 +3,31 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { logger } from '../utils/logger';
-import { launchCampaign } from '../services/reengagement.service';
+import { createCampaign } from '../services/reengagement.service';
+import { reengagementQueue } from '../jobs/reengagement.job';
 
 const router = Router();
 
 router.use(authenticate);
 router.use(requireRole('admin', 'recruiter'));
 
-// POST /api/reengagement/trigger — manually trigger re-engagement for a job
+// POST /api/reengagement/trigger — manually trigger re-engagement for a job.
+// Creates the campaign row (visible immediately as 'pending') and enqueues the
+// heavy pipeline — FTS matching, throttled AI scoring, rate-limited emails —
+// to the worker instead of running it inside the HTTP request.
 router.post('/trigger', async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const schema = z.object({ job_id: z.string().uuid() });
     const { job_id } = schema.parse(req.body);
 
-    const campaignId = await launchCampaign(req.user!.org_id, job_id);
+    const campaignId = await createCampaign(req.user!.org_id, job_id);
+    await reengagementQueue.add(
+      `reengagement-manual-${campaignId}`,
+      { campaignId, orgId: req.user!.org_id, jobId: job_id },
+      { jobId: `reengagement-manual-${campaignId}` },
+    );
 
-    res.json({ success: true, campaign_id: campaignId });
+    res.status(202).json({ success: true, campaign_id: campaignId });
   } catch (err: any) {
     logger.error('Re-engagement trigger error:', err);
     res.status(400).json({ success: false, error: err.message });

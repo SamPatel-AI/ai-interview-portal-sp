@@ -95,8 +95,37 @@ export async function preFilterCandidates(
 }
 
 /**
+ * Create the campaign row only (status 'pending'). Cheap — safe to call in an
+ * HTTP handler so the caller gets a campaign_id immediately; the heavy
+ * pipeline runs in the worker via launchCampaign(existingCampaignId).
+ */
+export async function createCampaign(
+  orgId: string,
+  jobId: string,
+  config: Record<string, unknown> = {},
+): Promise<string> {
+  // Org-scoped job check — jobId comes from the request body, and without
+  // this a recruiter could launch a campaign against another org's job.
+  const { data: job, error: jobErr } = await supabaseAdmin
+    .from('jobs')
+    .select('id')
+    .eq('id', jobId)
+    .eq('org_id', orgId)
+    .single();
+  if (jobErr || !job) throw new Error(`Job ${jobId} not found`);
+
+  const { data: campaign, error } = await supabaseAdmin
+    .from('reengagement_campaigns')
+    .insert({ org_id: orgId, job_id: jobId, status: 'pending', config })
+    .select('id')
+    .single();
+  if (error || !campaign) throw new Error(`Failed to create campaign: ${error?.message}`);
+  return campaign.id;
+}
+
+/**
  * Launch a re-engagement campaign for a specific job.
- * 1. Creates campaign record
+ * 1. Creates campaign record (unless existingCampaignId is passed)
  * 2. Pre-filters candidates via FTS
  * 3. Scores them with lite AI screening
  * 4. Emails high-scorers (fit_score >= 6)
@@ -104,13 +133,15 @@ export async function preFilterCandidates(
 export async function launchCampaign(
   orgId: string,
   jobId: string,
-  config: Record<string, unknown> = {}
+  config: Record<string, unknown> = {},
+  existingCampaignId?: string,
 ) {
-  // Get job details
+  // Get job details (org-scoped — jobId may originate from user input)
   const { data: job, error: jobErr } = await supabaseAdmin
     .from('jobs')
     .select('id, title, description, skills, client_company_id, client_companies(name)')
     .eq('id', jobId)
+    .eq('org_id', orgId)
     .single();
 
   if (jobErr || !job) {
@@ -119,21 +150,32 @@ export async function launchCampaign(
 
   const companyName = (job.client_companies as any)?.name || 'our company';
 
-  // 1. Create campaign
-  const { data: campaign, error: campErr } = await supabaseAdmin
-    .from('reengagement_campaigns')
-    .insert({
-      org_id: orgId,
-      job_id: jobId,
-      status: 'matching',
-      config,
-    })
-    .select('id')
-    .single();
+  // 1. Create (or adopt) the campaign row
+  let campaignId: string;
+  if (existingCampaignId) {
+    campaignId = existingCampaignId;
+    await supabaseAdmin
+      .from('reengagement_campaigns')
+      .update({ status: 'matching' })
+      .eq('id', campaignId);
+  } else {
+    const { data: campaign, error: campErr } = await supabaseAdmin
+      .from('reengagement_campaigns')
+      .insert({
+        org_id: orgId,
+        job_id: jobId,
+        status: 'matching',
+        config,
+      })
+      .select('id')
+      .single();
 
-  if (campErr || !campaign) {
-    throw new Error(`Failed to create campaign: ${campErr?.message}`);
+    if (campErr || !campaign) {
+      throw new Error(`Failed to create campaign: ${campErr?.message}`);
+    }
+    campaignId = campaign.id;
   }
+  const campaign = { id: campaignId };
 
   try {
     // 2. Pre-filter candidates via FTS

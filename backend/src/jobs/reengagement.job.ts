@@ -24,7 +24,18 @@ export const reengagementQueue = new Queue('reengagement-checker', {
 
 export const reengagementWorker = new Worker(
   'reengagement-checker',
-  async () => {
+  async (job) => {
+    // Manual per-job campaign (enqueued by POST /api/reengagement/trigger
+    // with a pre-created 'pending' campaign row). The HTTP handler used to
+    // run the whole pipeline inline — FTS + throttled AI scoring + emails
+    // blocked the request for 20s+ on large candidate pools.
+    const manual = job.data as { campaignId?: string; orgId?: string; jobId?: string };
+    if (manual?.campaignId && manual.orgId && manual.jobId) {
+      logger.info(`Running manual re-engagement campaign ${manual.campaignId}`);
+      await launchCampaign(manual.orgId, manual.jobId, {}, manual.campaignId);
+      return;
+    }
+
     logger.info('Running re-engagement check...');
 
     // Get all organizations

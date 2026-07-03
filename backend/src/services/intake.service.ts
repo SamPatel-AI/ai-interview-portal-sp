@@ -128,7 +128,17 @@ export async function ingestCandidate(input: IngestCandidateInput): Promise<Inge
         .insert({ org_id: orgId, candidate_id: candidateId, job_id: resolvedJobId, status: 'new' })
         .select('id')
         .single();
-      if (!appErr && newApp) applicationId = newApp.id;
+      // A failed insert must THROW, not silently continue: swallowing it left
+      // a candidate with no application and reported the intake as merely
+      // "unmatched" — invisible data loss. Callers already record failures
+      // (the webhook 500s; the mail poller writes status='failed' + error to
+      // the ceipal_submissions ledger).
+      if (appErr || !newApp) {
+        throw new Error(
+          `Failed to create application for candidate ${candidateId} on job ${resolvedJobId}: ${appErr?.message ?? 'no row returned'}`,
+        );
+      }
+      applicationId = newApp.id;
     }
   }
 
