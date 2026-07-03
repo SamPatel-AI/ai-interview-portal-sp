@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { env } from './config/env';
+import { supabaseAdmin } from './config/database';
 import { logger } from './utils/logger';
 import { runStartupChecks } from './config/startupChecks';
 import { errorHandler } from './middleware/errorHandler';
@@ -29,16 +30,21 @@ import reengagementRoutes from './routes/reengagement.routes';
 import { startReengagementScheduler } from './jobs/reengagement.job';
 
 // Side-effect imports — BullMQ workers auto-start on module instantiation
-import './jobs/emailSender.job';
-import './jobs/callRetry.job';
-import './jobs/callScheduler.job';
-import { pollScheduledCalls } from './jobs/callScheduler.job';
-import './jobs/ceipalSync.job';
-import { startRecurringCeipalSync } from './jobs/ceipalSync.job';
-import './jobs/resumeProcessor.job';
-import { startRecurringCeipalMailPoll } from './jobs/ceipalMailPoll.job';
+import { emailQueue, emailWorker } from './jobs/emailSender.job';
+import { callRetryQueue, callRetryWorker } from './jobs/callRetry.job';
+import { callSchedulerQueue, callSchedulerWorker, pollScheduledCalls } from './jobs/callScheduler.job';
+import { ceipalSyncQueue, ceipalSyncWorker, startRecurringCeipalSync } from './jobs/ceipalSync.job';
+import { resumeQueue, resumeWorker } from './jobs/resumeProcessor.job';
+import { reengagementQueue, reengagementWorker } from './jobs/reengagement.job';
+import { ceipalMailQueue, ceipalMailWorker, startRecurringCeipalMailPoll } from './jobs/ceipalMailPoll.job';
+import { redis } from './config/redis';
 
 const app = express();
+
+// Behind Railway's proxy: trust exactly one hop so req.ip is the CLIENT
+// address, not the proxy's. Without this the rate limiter keys every user
+// onto the proxy IP — one shared bucket for all traffic.
+app.set('trust proxy', 1);
 
 // --- Global middleware ---
 app.use(helmet());
@@ -71,9 +77,34 @@ app.use(morgan('short', {
 }));
 app.use('/api', apiLimiter);
 
-// --- Health check ---
+// --- Health checks ---
+// /health = liveness (shallow; Railway's deploy healthcheck hits this — it
+// must not flap on a dependency blip). /health/ready = readiness: proves DB
+// and Redis are actually reachable; 503 with per-dependency detail when not.
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/health/ready', async (_req, res) => {
+  const checks: Record<string, string> = {};
+
+  await Promise.all([
+    supabaseAdmin
+      .from('organizations')
+      .select('id', { count: 'exact', head: true })
+      .then(({ error }) => { checks.database = error ? `error: ${error.message}` : 'ok'; }),
+    redis
+      .ping()
+      .then(() => { checks.redis = 'ok'; })
+      .catch((err: Error) => { checks.redis = `error: ${err.message}`; }),
+  ]);
+
+  const healthy = Object.values(checks).every((v) => v === 'ok');
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    checks,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // --- API routes ---
@@ -103,8 +134,9 @@ app.use((_req, res) => {
 app.use(errorHandler);
 
 // --- Start server ---
+let pollTimer: NodeJS.Timeout | undefined;
 const PORT = parseInt(env.PORT, 10);
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT} in ${env.NODE_ENV} mode`);
 
   // Loud config diagnostics (email transport, webhook auth, Cal.com API).
@@ -130,7 +162,7 @@ app.listen(PORT, () => {
   // Promote due scheduled calls (cal.com bookings, post-call callbacks) into the
   // call-scheduler queue every minute. Without this, scheduled calls never dial.
   const SCHEDULED_CALL_POLL_MS = 60_000;
-  setInterval(() => {
+  pollTimer = setInterval(() => {
     pollScheduledCalls().catch(err => {
       logger.error('pollScheduledCalls failed:', err);
     });
@@ -138,5 +170,45 @@ app.listen(PORT, () => {
   pollScheduledCalls().catch(err => logger.error('initial pollScheduledCalls failed:', err));
   logger.info(`Scheduled-call poller started (every ${SCHEDULED_CALL_POLL_MS / 1000}s)`);
 });
+
+// --- Graceful shutdown ---
+// Railway sends SIGTERM on every redeploy. Without this, in-flight HTTP
+// requests are severed and BullMQ jobs die mid-run (a half-placed call, a
+// half-sent email) and get retried by the next container — drops and dupes.
+// Order: stop taking HTTP → stop the poller → drain workers → close queue
+// producers and Redis → exit.
+const workers = [
+  emailWorker, callRetryWorker, callSchedulerWorker,
+  ceipalSyncWorker, resumeWorker, reengagementWorker, ceipalMailWorker,
+];
+const queues = [
+  emailQueue, callRetryQueue, callSchedulerQueue,
+  ceipalSyncQueue, resumeQueue, reengagementQueue, ceipalMailQueue,
+];
+
+let shuttingDown = false;
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`${signal} received — shutting down gracefully`);
+
+  const forceExit = setTimeout(() => {
+    logger.error('Graceful shutdown timed out after 25s — forcing exit');
+    process.exit(1);
+  }, 25_000);
+  forceExit.unref();
+
+  if (pollTimer) clearInterval(pollTimer);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await Promise.allSettled(workers.map((w) => w.close()));
+  await Promise.allSettled(queues.map((q) => q.close()));
+  await redis.quit().catch(() => { /* already closed */ });
+
+  logger.info('Shutdown complete');
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
+process.on('SIGINT', () => { void shutdown('SIGINT'); });
 
 export default app;
