@@ -361,6 +361,101 @@ export async function sendFollowUpEmail(
   });
 }
 
+function missedCallTemplate(
+  candidateName: string,
+  jobTitle: string,
+  callbackNumber: string | null,
+  link?: Omit<CalLinkParams, 'deadline'>,
+): { subject: string; body: string } {
+  const calUrl = buildCalUrl({ ...link });
+  const callbackOption = callbackNumber
+    ? `<p><strong>Option 1 — Call us back</strong><br>
+  Call <a href="tel:${callbackNumber}">${callbackNumber}</a> — our AI interviewer will recognize your number and can run the interview right away.</p>
+
+  <p><strong>Option 2 — Pick a new time</strong><br>`
+    : `<p><strong>Pick a new time</strong><br>`;
+
+  return {
+    subject: `We Missed You - Interview Call for ${jobTitle}`,
+    body: `<div style="font-family: Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #222;">
+  <p>Hello ${candidateName},</p>
+
+  <p>We just tried to reach you for your screening interview for the <strong>${jobTitle}</strong> role at Saanvi Technology, but couldn't get through.</p>
+
+  ${callbackOption}
+  Book a new slot using this link:<br>
+  <a href="${calUrl}">${calUrl}</a></p>
+
+  <p>If you have any questions or would like to withdraw your application, simply reply to this email.</p>
+
+  <p>Best regards,<br>
+  <strong>Saanvi AI,</strong><br>
+  Saanvi Technology.</p>
+</div>`,
+  };
+}
+
+/**
+ * Notify a candidate that we tried to call them and couldn't get through
+ * (voicemail / no answer / failed dial). Looks up everything it needs so the
+ * webhook handler can fire-and-forget it. The callback number is the org's
+ * active inbound line; calling it back routes through the inbound webhook,
+ * which recognizes the candidate and resumes the interview flow.
+ */
+export async function sendMissedCallEmail(params: {
+  candidateId: string;
+  applicationId: string | null;
+  orgId: string;
+}): Promise<void> {
+  const { data: candidate } = await supabaseAdmin
+    .from('candidates')
+    .select('id, first_name, last_name, email')
+    .eq('id', params.candidateId)
+    .single();
+  if (!candidate?.email) {
+    logger.warn(`Missed-call email skipped: candidate ${params.candidateId} not found or has no email`);
+    return;
+  }
+
+  let jobTitle = 'your interview';
+  let jobId: string | undefined;
+  if (params.applicationId) {
+    const { data: app } = await supabaseAdmin
+      .from('applications')
+      .select('job_id, jobs (id, title)')
+      .eq('id', params.applicationId)
+      .single();
+    const job = app?.jobs as { id?: string; title?: string } | null;
+    if (job?.title) jobTitle = job.title;
+    jobId = job?.id;
+  }
+
+  const { data: phone } = await supabaseAdmin
+    .from('phone_numbers')
+    .select('number')
+    .eq('org_id', params.orgId)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle();
+
+  const candidateName = `${candidate.first_name} ${candidate.last_name}`.trim();
+  const template = missedCallTemplate(candidateName, jobTitle, phone?.number || null, {
+    email: candidate.email,
+    name: candidateName,
+    applicationId: params.applicationId || undefined,
+    jobId,
+  });
+
+  await sendEmail({
+    candidateId: candidate.id,
+    applicationId: params.applicationId || undefined,
+    toEmail: candidate.email,
+    type: 'custom',
+    subject: template.subject,
+    body: template.body,
+  });
+}
+
 /**
  * Send a re-engagement email to a past candidate for a new matching job.
  */
