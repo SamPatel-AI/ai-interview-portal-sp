@@ -103,20 +103,42 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
               <p className="text-sm text-muted-foreground">
                 {app.jobs?.title ?? 'Unknown Job'} {app.jobs?.client_companies?.name ? `• ${app.jobs.client_companies.name}` : ''}
               </p>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="capitalize">{app.status}</Badge>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge
+                  variant="outline"
+                  className={stage ? PIPELINE_STAGE_COLORS[stage] ?? '' : ''}
+                >
+                  {stage ? PIPELINE_STAGE_LABELS[stage] ?? stage : app.status}
+                </Badge>
+                {subBadge && (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${phaseClasses(subBadge.tone)}`}>
+                    {subBadge.label}
+                  </span>
+                )}
                 {app.candidates?.email && (
                   <span className="text-xs text-muted-foreground">{app.candidates.email}</span>
                 )}
               </div>
 
-              {app.status !== 'rejected' ? (
+              {stage === 'archived' ? (
+                <div className="pt-2">
+                  <div className="h-7 flex items-center justify-center rounded-md text-xs font-medium bg-muted text-muted-foreground">
+                    {app.status === 'rejected' ? 'Rejected' : app.status === 'hired' ? 'Hired' : 'Archived'}
+                  </div>
+                </div>
+              ) : stage === 'failed' ? (
+                <div className="pt-2">
+                  <div className="h-7 flex items-center justify-center rounded-md text-xs font-medium bg-destructive/10 text-destructive">
+                    {PIPELINE_STAGE_LABELS.failed}
+                  </div>
+                </div>
+              ) : (
                 <div className="flex items-center gap-1 pt-2">
-                  {pipelineSteps.map((step, i) => {
-                    const isActive = i <= currentStep;
-                    const isCurrent = i === currentStep;
+                  {PIPELINE_SEQUENCE.map((key, i) => {
+                    const isActive = currentIdx >= 0 && i <= currentIdx;
+                    const isCurrent = i === currentIdx;
                     return (
-                      <div key={step.key} className="flex items-center gap-1 flex-1">
+                      <div key={key} className="flex items-center gap-1 flex-1">
                         <div className={`flex items-center justify-center h-7 flex-1 rounded-md text-xs font-medium transition-colors ${
                           isCurrent
                             ? 'bg-primary text-primary-foreground'
@@ -124,20 +146,14 @@ export default function ApplicationDetailSheet({ applicationId, open, onOpenChan
                             ? 'bg-primary/20 text-primary'
                             : 'bg-muted text-muted-foreground'
                         }`}>
-                          {step.label}
+                          {PIPELINE_STAGE_LABELS[key]}
                         </div>
-                        {i < pipelineSteps.length - 1 && (
+                        {i < PIPELINE_SEQUENCE.length - 1 && (
                           <ArrowRight className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground/40'}`} />
                         )}
                       </div>
                     );
                   })}
-                </div>
-              ) : (
-                <div className="pt-2">
-                  <div className="h-7 flex items-center justify-center rounded-md text-xs font-medium bg-destructive/10 text-destructive">
-                    Rejected
-                  </div>
                 </div>
               )}
             </div>
