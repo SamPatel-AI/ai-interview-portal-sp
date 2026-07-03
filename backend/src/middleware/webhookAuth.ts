@@ -22,12 +22,43 @@ export function verifyRetellSignature(req: Request, res: Response, next: NextFun
 
   const signature = req.headers['x-retell-signature'];
   if (typeof signature !== 'string' || !Retell.verify(rawBodyString(req), env.RETELL_API_KEY, signature)) {
-    logger.warn(`Rejected Retell webhook with invalid signature (${req.path})`);
+    logRetellRejectDiagnostics(req, signature);
     res.status(401).json({ error: 'Invalid signature' });
     return;
   }
 
   next();
+}
+
+// Prod webhooks are being rejected even for calls the deployed backend placed
+// itself, so the mechanism (not key drift between environments) is suspect.
+// The signature is `v=<ts>,d=hmac-sha256(API_KEY, rawBody + ts)`; this logs
+// which stage disagrees — format, timestamp window, or digest — WITHOUT ever
+// logging the secret, the body, or a full usable signature.
+function logRetellRejectDiagnostics(req: Request, signature: unknown): void {
+  const parts: string[] = [];
+  if (typeof signature !== 'string') {
+    parts.push(`signature header missing/not-string (type=${typeof signature})`);
+  } else {
+    const m = /v=(\d+),d=(.*)/.exec(signature);
+    if (!m) {
+      parts.push(`signature format unrecognized (len=${signature.length})`);
+    } else {
+      const ageMs = Date.now() - Number(m[1]);
+      parts.push(`sig timestamp age=${ageMs}ms (limit 300000)`);
+      const body = rawBodyString(req);
+      const expected = crypto
+        .createHmac('sha256', env.RETELL_API_KEY)
+        .update(body + m[1])
+        .digest('hex');
+      parts.push(`digest match=${expected === m[2]} (got ${m[2].slice(0, 8)}…, expected ${expected.slice(0, 8)}…)`);
+    }
+  }
+  parts.push(
+    `content-type=${req.headers['content-type']}`,
+    `body isBuffer=${Buffer.isBuffer(req.body)} len=${rawBodyString(req).length}`,
+  );
+  logger.warn(`Rejected Retell webhook (${req.path}): ${parts.join('; ')}`);
 }
 
 // Shared-secret guard for webhooks from systems without payload signing
