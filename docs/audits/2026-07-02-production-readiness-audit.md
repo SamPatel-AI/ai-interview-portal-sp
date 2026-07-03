@@ -23,39 +23,28 @@ client-ready; strike items as they land.
 |---|---------|-----|--------|
 | B1 | `POST /api/auth/signup` public, email pre-confirmed, accepted arbitrary `org_id` → outsider joins ANY org as recruiter (or becomes admin of a new org) | Invite-only signup: org-join path removed, self-serve gated behind `ALLOW_PUBLIC_SIGNUP=false`; members via admin `POST /api/users/invite`. Lovable prompt removes the Signup page | ✅ DONE — #25 merged+deployed 7/2 |
 | B2 | `resumes` storage bucket policies allowed any authenticated user to read/overwrite every org's resumes | Migration **017**: drop permissive policies, pin bucket private (all access is backend/service-role; verified frontend never touches storage) | ✅ DONE — 017 applied 7/2, bucket verified private |
-| B3 | Live secrets travel unencrypted in `.env` files (never committed — verified) | Rotate ALL third-party secrets (Supabase service-role, Retell, CEIPAL, OpenRouter, Graph, Cal, webhook secret) | OPEN — Day 2 |
+| B3 | Live secrets travel unencrypted in `.env` files (never committed — verified) | Rotate ALL third-party secrets (Supabase service-role, Retell, CEIPAL, OpenRouter, Graph, Cal, webhook secret) | ⚠️ RISK ACCEPTED by owner 7/3 — keys kept as-is; rotation runbook below stands if circumstances change |
 | B4 | `POST /api/portal/generate-token` unauthenticated → 72h PII token for any candidate UUID | `authenticate` + `requireRole(admin,recruiter)` + candidate must be in caller's org | ✅ DONE — #25 merged+deployed 7/2 |
-| B5 | Re-engagement sweep runaway: every 6h it treated ~1,730 CEIPAL "open" jobs as stale → 68k junk campaigns / 1.05M child rows; mass-email prevented only by an email-dedup bug (all campaign emails shared one BullMQ jobId) | Sweep opt-in (`REENGAGEMENT_AUTO_SWEEP=false`, removes persisted Redis repeatable at boot), jobId collision fixed, 30-day job recency, 7-day campaign cooldown. Purge script: `scripts/ops/purge_campaigns.py` | ✅ code DONE — #24 merged+deployed 7/2; prod logs confirm recurring job REMOVED. ⏳ purge of 68k junk rows still to run (user-run only) |
-| B6 | Retell agents synced 6/16 (pre account-move) → their webhook URLs likely point at the DEAD old Railway domain → post-call transcripts/evals silently lost | Re-sync all 3 agents (`scripts/ops/update_agent_personas.py` does this while applying the Grace/Adrian/Brian personas). Verify webhook URL in Retell dashboard | Script ready — RUN |
+| B5 | Re-engagement sweep runaway: every 6h it treated ~1,730 CEIPAL "open" jobs as stale → 68k junk campaigns / 1.05M child rows; mass-email prevented only by an email-dedup bug (all campaign emails shared one BullMQ jobId) | Sweep opt-in (`REENGAGEMENT_AUTO_SWEEP=false`, removes persisted Redis repeatable at boot), jobId collision fixed, 30-day job recency, 7-day campaign cooldown. Purge script: `scripts/ops/purge_campaigns.py` | ✅ code DONE — #24 merged+deployed 7/2; prod logs confirm recurring job REMOVED. ✅ purge complete 7/3 — both tables verified at 0 rows |
+| B6 | Retell agents synced 6/16 (pre account-move) → their webhook URLs likely point at the DEAD old Railway domain → post-call transcripts/evals silently lost | Re-synced 7/3 with Grace/Adrian/Brian personas; webhook URLs verified on the live domain via Retell API. Root cause of rejected webhooks found & fixed: Retell signs with the account key tagged 'Webhook' → RETELL_WEBHOOK_KEY added (PR #29), accepted webhook verified on a live call | ✅ DONE |
 
 ## High priority (Day 2)
 
-1. **No CI** — add GitHub Actions: typecheck + test on every PR. Note: backend
-   `lint` script exists but eslint is not installed (devDependency missing).
-2. **Fail-closed webhook auth in production** — `middleware/webhookAuth.ts`
-   passes requests through with a warning when `RETELL_API_KEY` /
-   `WEBHOOK_SHARED_SECRET` are unset. Must 503 in `NODE_ENV=production`.
-3. **`trust proxy` unset** (`index.ts`) — rate limiter keys on Railway's proxy
-   IP: one shared bucket for all users. `app.set('trust proxy', 1)`.
+1. ~~**No CI**~~ ✅ DONE (PR #30): typecheck + lint + tests on every PR; eslint installed in backend.
+2. ~~**Fail-closed webhook auth in production**~~ ✅ DONE (PR #31): 503 in production when a webhook secret is unset.
+3. ~~**`trust proxy` unset**~~ ✅ DONE (PR #31).
 4. **Single-instance assumptions** — 60s `setInterval` call poller + all 7
    BullMQ workers run inside the web process. >1 Railway replica ⇒ duplicate
    dials. Needs a worker service or a DB claim/lock before scaling.
-5. **Intake swallows application-insert errors** (`intake.service.ts` ~L131) —
-   candidate saved, application silently missing.
-6. **Emails endpoint paginates cross-org then filters in JS**
-   (`emails.routes.ts` ~L22-44) — wrong totals + cross-org count leak;
-   `email_logs` needs org scoping at query level.
-7. **Graceful shutdown + deep health** — no SIGTERM handling; `/health`
-   doesn't check DB/Redis.
-8. **Re-engagement campaign launch runs synchronously in the HTTP handler**
-   (`reengagement.routes.ts`) — move to the queue.
+5. ~~**Intake swallows application-insert errors**~~ ✅ DONE (PR #32): throws; failures land in the ceipal_submissions ledger.
+6. ~~**Emails endpoint paginates cross-org**~~ ✅ DONE (PR #32): inner-join org scoping at the query level.
+7. ~~**Graceful shutdown + deep health**~~ ✅ DONE (PR #31): SIGTERM drain + /health/ready.
+8. ~~**Re-engagement launch in HTTP handler**~~ ✅ DONE (PR #32): pending row + worker queue; also fixed missing org scope on the job lookup.
 
 ## Compliance / client-handoff (Day 3–4)
 
-- **TCPA/opt-out**: `candidates.reengagement_opted_out` is read but NOTHING can
-  set it — build unsubscribe link + endpoint before any automated outreach.
-- **Right-to-erasure**: no candidate delete endpoint; add one (+ storage/
-  transcript cleanup) for GDPR/CCPA requests.
+- ~~**TCPA/opt-out**~~ ✅ DONE (PR #33): HMAC unsubscribe link in re-engagement emails + public opt-out endpoint + recruiter PATCH field; verified live.
+- ~~**Right-to-erasure**~~ ✅ DONE (PR #33): admin DELETE /api/candidates/:id — storage files + FK cascades.
 - **PII in logs**: emails/phones logged at info level in webhooks; redact.
 - **Sub-processors**: resumes go to OpenRouter; name/phone/transcript/audio to
   Retell — client's DPA needs both listed.
