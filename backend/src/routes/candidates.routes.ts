@@ -220,12 +220,37 @@ router.delete(
       if (candErr || !candidate) throw new AppError(404, 'Candidate not found');
 
       // Storage doesn't cascade — remove every file under the candidate's prefix.
+      // Failures here are FATAL (same rule as the 0-row delete below): this runs
+      // before the row delete, so a 500 leaves the candidate intact and the
+      // admin retries the whole erasure — never a deleted row with orphaned PII
+      // files left in the bucket.
       const prefix = `${req.user!.org_id}/${candidateId}`;
-      const { data: files } = await supabaseAdmin.storage.from('resumes').list(prefix);
+      const { data: files, error: listErr } = await supabaseAdmin.storage.from('resumes').list(prefix);
+      if (listErr) {
+        logger.error(`Failed to list resume files for ${candidateId}:`, listErr);
+        throw new AppError(500, 'Failed to enumerate stored resume files — erasure aborted');
+      }
       if (files?.length) {
         const paths = files.map((f) => `${prefix}/${f.name}`);
         const { error: rmErr } = await supabaseAdmin.storage.from('resumes').remove(paths);
-        if (rmErr) logger.error(`Failed to remove resume files for ${candidateId}:`, rmErr);
+        if (rmErr) {
+          logger.error(`Failed to remove resume files for ${candidateId}:`, rmErr);
+          throw new AppError(500, 'Failed to remove stored resume files — erasure aborted');
+        }
+      }
+
+      // The CEIPAL intake ledger keeps its rows on candidate delete (the FK is
+      // SET NULL — deleting them would break dedup and let the mail poller
+      // re-ingest, resurrecting the erased candidate). Scrub the PII-bearing
+      // columns instead, BEFORE the row delete severs candidate_id.
+      const { error: scrubErr } = await supabaseAdmin
+        .from('ceipal_submissions')
+        .update({ raw: null, error: null })
+        .eq('org_id', req.user!.org_id)
+        .eq('candidate_id', candidateId);
+      if (scrubErr) {
+        logger.error(`Failed to scrub ceipal_submissions for ${candidateId}:`, scrubErr);
+        throw new AppError(500, 'Failed to scrub intake ledger — erasure aborted');
       }
 
       // .select('id') makes the delete PROVE it removed rows — a 0-row delete
