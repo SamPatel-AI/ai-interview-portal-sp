@@ -48,8 +48,8 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
                 {c.work_authorization && <Badge variant="secondary">{c.work_authorization}</Badge>}
               </div>
               {c.resume_url && (
-                <Button variant="outline" size="sm" asChild className="w-fit">
-                  <a href={c.resume_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 mr-1" />View Résumé</a>
+                <Button variant="outline" size="sm" className="w-fit" onClick={() => openResume(c.id)}>
+                  <ExternalLink className="h-3 w-3 mr-1" />View Résumé
                 </Button>
               )}
             </div>
