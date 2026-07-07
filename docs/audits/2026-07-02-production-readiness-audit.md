@@ -44,34 +44,36 @@ client-ready; strike items as they land.
 ## Compliance / client-handoff (Day 3–4)
 
 - ~~**TCPA/opt-out**~~ ✅ DONE (PR #33): HMAC unsubscribe link in re-engagement emails + public opt-out endpoint + recruiter PATCH field; verified live.
-- ~~**Right-to-erasure**~~ ✅ DONE (PR #33): admin DELETE /api/candidates/:id — storage files + FK cascades.
-- **PII in logs**: emails/phones logged at info level in webhooks; redact.
-- **Sub-processors**: resumes go to OpenRouter; name/phone/transcript/audio to
-  Retell — client's DPA needs both listed.
-- **Resume serving**: stored `getPublicUrl` links never worked on the private
-  bucket — add a backend signed-URL endpoint for uploaded resumes.
-- Prod data cleanup: test candidates (`bf635c3b…`, `1af7e2eb…` Sam Patel,
-  andrew…@gmail.com, test-pipeline@example.com), ~3 "Web Developer" test jobs,
-  orphan call `6feaa3b1`; ~13 stray dev agents in the Retell dashboard.
-- Docs: root README for the client; frontend README is still the Lovable
-  placeholder; CLAUDE.md DB section outdated (says 4 migrations / 17 tables).
+- ~~**Right-to-erasure**~~ ⚠️ endpoint shipped (PR #33, hardened #37/#44) but
+  the underlying DB DELETE on `candidates` silently affects 0 rows (prod-side
+  cause never diagnosed). **Owner decision 7/6: data is retained, deletion not
+  needed** — documented as Known Issue §8 in `docs/HANDOFF.md`.
+- ~~**PII in logs**~~ ✅ DONE (PR #42, 7/6): maskEmail/maskPhone at all 20
+  interpolating log sites (webhooks, intake, mail poll, email service).
+- ~~**Sub-processors**~~ ✅ DONE (7/6): full list in `docs/HANDOFF.md` §4.2.
+- ~~**Resume serving**~~ ✅ DONE (PR #43 + Lovable prompt, 7/6): signed-URL
+  endpoint `GET /api/candidates/:id/resume`; verified in the deployed UI.
+- Prod data cleanup (7/6): test jobs already gone; 3 stray Retell agents
+  identified by dry-run (10 of the ~13 were already gone) — `--delete` run
+  pending; stuck in_progress calls (`c851b08e`, `8a9ca7f6`, `6feaa3b1`) →
+  SQL patch pending; rehearsal job close + shared-test-phone clear pending.
+  The 2 remaining test candidates stay (deletion non-functional + owner
+  retains-all-data decision).
+- ~~Docs~~ ✅ DONE: root README (7/3), CLAUDE.md refreshed + creds scrubbed,
+  `docs/HANDOFF.md` + `docs/runbooks/credential-rotation.md` added (7/6).
 
 ## Frontend (all fixes go via Lovable prompts)
 
-- Six detail-sheet organisms bypass domain hooks with inline `apiRequest`
-  (JobDetailSheet, CandidateDetailSheet, CompanyDetailSheet, CallDetailSheet,
-  ApplicationDetailSheet partly, AgentBuilder) → ~15 domain hooks now dead and
-  `getScore()`/status-color maps triplicated. One prompt: collapse onto the
-  existing hooks.
-- **Stage display inconsistency**: list/kanban render `pipeline_stage`; the
-  application detail sheet still renders legacy `status` — same application
-  can show different stages.
-- `Emails.tsx` renders email HTML via `dangerouslySetInnerHTML` unsanitized —
-  sanitize (DOMPurify) or render text-only.
-- Settings: Profile/Organization save buttons and the whole Integrations tab
-  are inert placeholders — wire up or hide before handoff.
-- Dead: `pages/Index.tsx` (unrouted), `/signup` page (after PR #25),
-  scheduling-hook aliases, `useRecruiterWorkloads` (plural).
+All items below landed in the 7/3 Lovable cleanup batch — re-verified in the
+repo 7/6 (detail sheets hook-only, `pipeline_stage` in the detail sheet,
+DOMPurify in Emails.tsx, Settings pruned, Index/signup/dead hooks removed).
+
+- ~~Six detail-sheet organisms bypass domain hooks with inline `apiRequest`~~ ✅
+- ~~**Stage display inconsistency**~~ ✅
+- ~~`Emails.tsx` renders email HTML via `dangerouslySetInnerHTML` unsanitized~~ ✅
+- ~~Settings: inert placeholder buttons/tabs~~ ✅
+- ~~Dead: `pages/Index.tsx`, `/signup` page, scheduling-hook aliases,
+  `useRecruiterWorkloads`~~ ✅
 - Role gating is cosmetic (button-hiding in 3 spots, `as any` casts) — real
   enforcement is backend `requireRole`; acceptable, but don't rely on the UI.
 
@@ -96,10 +98,14 @@ with a test call (`POST /api/agents/:id/test-call`) to a recruiter phone.
 2. Campaign purge complete; sweep confirmed disabled in deploy logs.
 3. Agents re-synced (webhook URL on new domain), personas live, sign-off test
    call completed and transcript/eval landed in the DB.
-4. Secrets rotated; CI green on a test PR; webhook auth fail-closed;
-   trust proxy set.
-5. Opt-out + candidate-delete endpoints live.
-6. Lovable prompt batch run (signup removed, detail-sheet unification,
-   pipeline_stage consistency, email sanitization, Settings placeholders).
-7. End-to-end rehearsal: intake → screen → invite → book → live call →
-   transcript → pipeline board, all on the deployed stack.
+4. ~~Secrets rotated~~ (waived 7/6 — runbook delivered instead); CI green ✅;
+   webhook auth fail-closed ✅; trust proxy set ✅.
+5. Opt-out live ✅; candidate-delete: endpoint live but DB-level delete
+   non-functional — waived 7/6 (data-retention decision, see HANDOFF.md §4.8).
+6. ~~Lovable prompt batch run~~ ✅ DONE 7/3, re-verified 7/6.
+7. ~~End-to-end rehearsal~~ ✅ PASSED 7/3 16:24Z: intake → screen → invite →
+   book → outbound → voicemail → missed-call email → inbound callback →
+   interview → transcript → application flipped to interviewed.
+
+**Handoff status 7/6: DONE** except account-ownership transfer (checklist in
+`docs/HANDOFF.md` §5, executed by the owner at their pace).

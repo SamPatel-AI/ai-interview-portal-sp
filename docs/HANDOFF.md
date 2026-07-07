@@ -42,10 +42,9 @@ every variable, with comments. Values live in Railway (backend) and Lovable
   `supabase db push --linked` (remote history is in sync).
 - **Deploy**: merge to `main`; Railway and Lovable both auto-deploy. Verify
   `/health/ready` after backend deploys.
-- **Candidate erasure (GDPR)**: `DELETE /api/candidates/:id` (admin JWT). It
-  removes stored resume files, scrubs the CEIPAL intake ledger, and cascades
-  applications/calls/evaluations/email logs. It 500s rather than silently
-  failing — a retry after a 500 is safe and expected.
+- **Candidate deletion**: by owner decision (2026-07-06), candidate data is
+  retained indefinitely — deletion is not part of the operating model. See
+  Known Issues §8 before ever relying on `DELETE /api/candidates/:id`.
 - **Ops scripts** (`scripts/ops/`): `cleanup_retell_strays.py` (delete
   non-portal Retell agents; guards live + phone-bound agents; dry-run by
   default), `purge_campaigns.py` (bulk-delete re-engagement campaigns),
@@ -86,11 +85,21 @@ Read this before scaling, contracting, or debugging.
    got the message + a missed-call email); no-answer/failed redials up to 3
    attempts, then emails. Inbound callbacks match a missed candidate for 7
    days, resume an interrupted interview within 2 hours.
+8. **Candidate deletion is non-functional.** The `DELETE /api/candidates/:id`
+   endpoint's application code is correct (it scrubs storage + the intake
+   ledger, then deletes with verification), but the database DELETE on
+   `candidates` silently affects 0 rows — a prod-side trigger/rule/RLS quirk
+   that was never diagnosed. The endpoint fails **loudly** (500) rather than
+   pretending success. Accepted at handoff because the operating model retains
+   all candidate data. If a legal erasure request ever arrives, diagnose first:
+   inspect triggers/rules/RLS on `candidates` in the Supabase SQL editor
+   (`pg_trigger`, `pg_rules`, `pg_class.relrowsecurity`).
 
 ## 5. Account-ownership transfer checklist
 
-Do these in order; rotate credentials (runbook) **before** transferring so the
-new owner starts with secrets the previous operator never held.
+Credentials were **not** rotated at handoff (owner decision 2026-07-06 —
+internal software, risk accepted). Run the rotation runbook at takeover, since
+the previous operator held all current secrets.
 
 - [ ] **1. Rotate all credentials** per the runbook, storing new values in the
   new owner's vault.
