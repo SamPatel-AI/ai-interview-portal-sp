@@ -6,6 +6,7 @@ import { authenticate, requireRole } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import '../types';
 import { logger } from '../utils/logger';
+import { resumeStoragePath } from '../utils/resumePath';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -178,11 +179,6 @@ router.post(
         throw new AppError(500, 'Failed to upload resume');
       }
 
-      // Update candidate record
-      const { data: publicUrl } = supabaseAdmin.storage
-        .from('resumes')
-        .getPublicUrl(filePath);
-
       await supabaseAdmin
         .from('candidates')
         .update({ resume_url: filePath })
@@ -190,13 +186,49 @@ router.post(
 
       res.json({
         success: true,
-        data: { resume_url: filePath, public_url: publicUrl.publicUrl },
+        data: { resume_url: filePath },
       });
     } catch (err) {
       next(err);
     }
   }
 );
+
+// ─── GET /api/candidates/:id/resume ────────────────────────
+// The resumes bucket is private (service-role only, migration 017), so the
+// frontend can't link to files directly. This mints a short-lived signed URL.
+// Returned as JSON rather than a redirect: the JWT rides in fetch headers, so
+// a browser-followed <a href> to this endpoint could never authenticate.
+
+router.get('/:id/resume', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { data: candidate, error } = await supabaseAdmin
+      .from('candidates')
+      .select('id, resume_url')
+      .eq('id', req.params.id)
+      .eq('org_id', req.user!.org_id)
+      .single();
+
+    if (error || !candidate) throw new AppError(404, 'Candidate not found');
+
+    const path = resumeStoragePath(candidate.resume_url);
+    if (!path) throw new AppError(404, 'Candidate has no stored resume');
+
+    const EXPIRES_IN = 300; // seconds
+    const { data: signed, error: signErr } = await supabaseAdmin.storage
+      .from('resumes')
+      .createSignedUrl(path, EXPIRES_IN);
+
+    if (signErr || !signed?.signedUrl) {
+      logger.error(`Failed to sign resume URL for candidate ${candidate.id}:`, signErr);
+      throw new AppError(500, 'Failed to generate resume link');
+    }
+
+    res.json({ success: true, data: { url: signed.signedUrl, expires_in: EXPIRES_IN } });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ─── DELETE /api/candidates/:id ─────────────────────────────
 // Right-to-erasure: permanently removes the candidate, their stored resume
