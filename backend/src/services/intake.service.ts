@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/database';
 import { logger } from '../utils/logger';
+import { maskEmail } from '../utils/redact';
 import { queueResumeProcessing } from '../jobs/resumeProcessor.job';
 
 /**
@@ -165,7 +166,7 @@ export async function ingestCandidate(input: IngestCandidateInput): Promise<Inge
     });
   }
 
-  logger.info(`Intake: candidate ${candidateId} (${normalizedEmail}), application ${applicationId ?? 'none'}`);
+  logger.info(`Intake: candidate ${candidateId} (${maskEmail(normalizedEmail)}), application ${applicationId ?? 'none'}`);
 
   return { candidateId, applicationId, resolvedJobId, matched: !!applicationId };
 }

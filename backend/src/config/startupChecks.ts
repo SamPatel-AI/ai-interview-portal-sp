@@ -61,6 +61,12 @@ export function runStartupChecks(): void {
     logger.info(
       `CEIPAL mail intake: polling ${env.MS_GRAPH_SENDER} every ${env.CEIPAL_MAIL_POLL_MINUTES}m for org ${env.DEFAULT_ORG_ID}`,
     );
+    if (!env.CEIPAL_RECRUITER_ID) {
+      logger.warn(
+        'CEIPAL_RECRUITER_ID is not set — the assigned-recruiter gate is disabled; ' +
+        'ALL parsed applicant emails in the inbox will be ingested.',
+      );
+    }
   }
 
   // ── Cal.com API (deadline backstop + availability) ───────

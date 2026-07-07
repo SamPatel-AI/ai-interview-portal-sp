@@ -41,8 +41,9 @@ const envSchema = z.object({
   CEIPAL_MAIL_POLL_MINUTES: z.string().default('5'),
   CEIPAL_MAIL_LOOKBACK_DAYS: z.string().default('3'),
   // Encoded CEIPAL user id whose assigned jobs are in-scope for email intake
-  // (Sam Patel / AISaanviHR@saanvi.us — resolved once via getUsersList).
-  CEIPAL_RECRUITER_ID: z.string().default('z5G7h3l6a1kMvyS65NP3c9XXNG0FW3dPbRUaKR83guY='),
+  // (resolve once via getUsersList). Unset = the assigned-recruiter gate is
+  // disabled and all parsed applicant emails are ingested.
+  CEIPAL_RECRUITER_ID: z.string().default(''),
 
   // Default org for server-side (non-authenticated) flows — single CEIPAL
   // account maps to one org. Used by the CEIPAL submissions poller.
