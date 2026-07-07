@@ -3,6 +3,7 @@ import { redis } from '../config/redis';
 import { supabaseAdmin } from '../config/database';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
+import { maskEmail } from '../utils/redact';
 import {
   listCeipalInboxMessages,
   getMessageBodyText,
@@ -120,7 +121,7 @@ async function processMessage(orgId: string, msg: GraphMailMessage): Promise<
     jobRow?.ceipal_assigned_recruiters &&
     !jobRow.ceipal_assigned_recruiters.includes(env.CEIPAL_RECRUITER_ID)
   ) {
-    logger.info(`ceipal-mail: ${parsed.jpcCode} is not assigned to our recruiter — skipping ${parsed.email}`);
+    logger.info(`ceipal-mail: ${parsed.jpcCode} is not assigned to our recruiter — skipping ${maskEmail(parsed.email)}`);
     await updateLedger(msg.internetMessageId, { status: 'skipped', job_code: parsed.jpcCode });
     await tryMoveToProcessed(msg.id);
     return 'skipped';

@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../config/database';
 import { webhookLimiter } from '../middleware/rateLimiter';
 import { logger } from '../utils/logger';
 import { phonesMatch } from '../utils/phone';
+import { maskEmail, maskPhone } from '../utils/redact';
 import { scheduleCallRetry } from '../jobs/callRetry.job';
 import { buildInboundContext, buildInboundBeginMessage } from '../utils/retellPromptBuilder';
 import { sendMissedCallEmail } from '../services/email.service';
@@ -40,7 +41,7 @@ router.post('/candidate-intake', requireWebhookSecret, async (req: Request, res:
       return;
     }
 
-    logger.info(`Candidate intake: ${email} for org ${org_id}`);
+    logger.info(`Candidate intake: ${maskEmail(email)} for org ${org_id}`);
 
     // 1-3. Upsert candidate + resolve job + create application (shared with the
     // CEIPAL submissions poll). This path supplies resume_text (no résumé bytes),
@@ -104,9 +105,9 @@ router.post('/candidate-intake', requireWebhookSecret, async (req: Request, res:
             })
             .eq('id', applicationId);
 
-          logger.info(`Auto-screening complete for ${email}: score ${result.overall_fit_rating}/10`);
+          logger.info(`Auto-screening complete for ${maskEmail(email)}: score ${result.overall_fit_rating}/10`);
         }).catch((err) => {
-          logger.error(`Auto-screening failed for ${email}:`, err);
+          logger.error(`Auto-screening failed for ${maskEmail(email)}:`, err);
         });
       }
     }
@@ -289,7 +290,7 @@ router.post('/cal-booking', verifyCalSignature, async (req: Request, res: Respon
 
     if (!scheduledStart) {
       // Malformed payload — retrying won't help, so acknowledge (200) but log loudly.
-      logger.error(`Cal booking webhook missing start time (uid=${bookingUid}, email=${candidateEmail})`);
+      logger.error(`Cal booking webhook missing start time (uid=${bookingUid}, email=${maskEmail(candidateEmail)})`);
       res.json({ received: true, scheduled: false, error: 'Missing start time' });
       return;
     }
@@ -310,7 +311,7 @@ router.post('/cal-booking', verifyCalSignature, async (req: Request, res: Respon
       }
     }
 
-    logger.info(`Cal.com booking: email=${candidateEmail} application_id=${metaApplicationId} at ${scheduledStart}`);
+    logger.info(`Cal.com booking: email=${maskEmail(candidateEmail)} application_id=${metaApplicationId} at ${scheduledStart}`);
 
     // ── Resolve the EXACT application (WS3) ───────────────────
     // 1) Authoritative: metadata.application_id carried through the invite link.
@@ -370,7 +371,7 @@ router.post('/cal-booking', verifyCalSignature, async (req: Request, res: Respon
     // (200, since retrying can't create a matching application).
     if (!application || !candidate) {
       logger.error(
-        `Cal booking UNMATCHED — no application found (email=${candidateEmail}, ` +
+        `Cal booking UNMATCHED — no application found (email=${maskEmail(candidateEmail)}, ` +
         `application_id=${metaApplicationId}, uid=${bookingUid}). No AI call will be scheduled.`,
       );
       res.json({ received: true, matched: false, scheduled: false, error: 'No matching application' });
@@ -438,7 +439,7 @@ router.post('/cal-booking', verifyCalSignature, async (req: Request, res: Respon
     // Don't hard-fail when the job has no agent: initiateOutboundCall falls back
     // to the org's default active agent. Only warn so the fallback can run.
     if (!appAgent?.retell_agent_id) {
-      logger.warn(`Cal booking: job has no agent for ${candidate.email}; will use org default agent`);
+      logger.warn(`Cal booking: job has no agent for ${maskEmail(candidate.email)}; will use org default agent`);
     }
 
     // ── Schedule the outbound call for the booked time ────────
@@ -463,7 +464,7 @@ router.post('/cal-booking', verifyCalSignature, async (req: Request, res: Respon
         message: `Failed to schedule the AI call for ${candidate.email}: ${String(scheduleErr)}`,
         details: { scheduled_at: scheduledStart, booking_uid: bookingUid, job_title: appJob?.title },
       });
-      logger.error(`Cal booking: scheduling failed for ${candidate.email}:`, scheduleErr);
+      logger.error(`Cal booking: scheduling failed for ${maskEmail(candidate.email)}:`, scheduleErr);
       res.status(500).json({ received: false, error: 'Failed to schedule call' });
       return;
     }
@@ -491,7 +492,7 @@ router.post('/cal-booking', verifyCalSignature, async (req: Request, res: Respon
       },
     });
 
-    logger.info(`Auto-scheduled call ${call.id} for ${candidate.email} at ${scheduledStart}`);
+    logger.info(`Auto-scheduled call ${call.id} for ${maskEmail(candidate.email)} at ${scheduledStart}`);
 
     res.json({
       received: true,
@@ -760,7 +761,7 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
     const fromNumber = inbound.from_number || body.from_number || body.caller_number || '';
     const toNumber = inbound.to_number || body.to_number || body.called_number || '';
 
-    logger.info(`Inbound call from ${fromNumber} to ${toNumber}`);
+    logger.info(`Inbound call from ${maskPhone(fromNumber)} to ${toNumber}`);
 
     // Find the phone number config
     const { data: phoneConfig } = await supabaseAdmin
@@ -835,7 +836,7 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
 
       // Reject: Retell treats non-2xx as failure and retries, so answer 200
       // with no override_agent_id to decline the call cleanly.
-      logger.warn(`Inbound call from ${fromNumber}: no candidate match and no agent configured for ${toNumber} — rejecting`);
+      logger.warn(`Inbound call from ${maskPhone(fromNumber)}: no candidate match and no agent configured for ${toNumber} — rejecting`);
       res.json({ call_inbound: {} });
       return;
     }
@@ -926,7 +927,7 @@ router.post('/retell/inbound', verifyRetellSignature, async (req: Request, res: 
     const agentId = agent?.retell_agent_id || phoneAgent?.retell_agent_id;
 
     if (!agentId) {
-      logger.warn(`Inbound call from ${fromNumber}: matched candidate ${candidate.id} but no agent available — rejecting`);
+      logger.warn(`Inbound call from ${maskPhone(fromNumber)}: matched candidate ${candidate.id} but no agent available — rejecting`);
       res.json({ call_inbound: {} });
       return;
     }

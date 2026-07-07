@@ -4,6 +4,7 @@ import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { Candidate, EmailType } from '../types';
 import { optOutUrl } from '../utils/optOut';
+import { maskEmail } from '../utils/redact';
 
 // ─── SMTP Transporter (created lazily) ────────────────────
 
@@ -242,16 +243,16 @@ export async function sendEmail(params: {
   subject: string;
   body: string;
 }): Promise<void> {
-  logger.info(`Sending ${params.type} email to ${params.toEmail}: ${params.subject}`);
+  logger.info(`Sending ${params.type} email to ${maskEmail(params.toEmail)}: ${params.subject}`);
 
   let status: 'sent' | 'failed' = 'sent';
 
   if (env.EMAIL_TRANSPORT === 'graph') {
     try {
       await sendViaGraph(params.toEmail, params.subject, params.body);
-      logger.info(`Email delivered via Microsoft Graph to ${params.toEmail}`);
+      logger.info(`Email delivered via Microsoft Graph to ${maskEmail(params.toEmail)}`);
     } catch (err) {
-      logger.error(`Graph delivery failed for ${params.toEmail}:`, err);
+      logger.error(`Graph delivery failed for ${maskEmail(params.toEmail)}:`, err);
       status = 'failed';
     }
   } else {
@@ -265,13 +266,13 @@ export async function sendEmail(params: {
           subject: params.subject,
           html: params.body,
         });
-        logger.info(`Email delivered via SMTP to ${params.toEmail}`);
+        logger.info(`Email delivered via SMTP to ${maskEmail(params.toEmail)}`);
       } catch (err) {
-        logger.error(`SMTP delivery failed for ${params.toEmail}:`, err);
+        logger.error(`SMTP delivery failed for ${maskEmail(params.toEmail)}:`, err);
         status = 'failed';
       }
     } else {
-      logger.info(`[LOG MODE] Would send ${params.type} email to ${params.toEmail}`);
+      logger.info(`[LOG MODE] Would send ${params.type} email to ${maskEmail(params.toEmail)}`);
     }
   }
 
