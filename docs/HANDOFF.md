@@ -49,7 +49,7 @@ every variable, with comments. Values live in Railway (backend) and Lovable
   non-portal Retell agents; guards live + phone-bound agents; dry-run by
   default), `purge_campaigns.py` (bulk-delete re-engagement campaigns),
   `update_agent_personas.py` (re-sync the three agents' personas/webhook URL to
-  Retell), `cleanup_test_data.py` (pre-handoff test-data purge — historical).
+  Retell).
 - **Credential rotation**: [`runbooks/credential-rotation.md`](./runbooks/credential-rotation.md).
 - More runbooks (campaign purge, persona re-sync details) live at the bottom of
   [`audits/2026-07-02-production-readiness-audit.md`](./audits/2026-07-02-production-readiness-audit.md).
