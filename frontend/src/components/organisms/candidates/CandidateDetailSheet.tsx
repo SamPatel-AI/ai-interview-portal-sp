@@ -6,8 +6,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Loader2, Mail, Phone, MapPin, FileText, ChevronDown, ExternalLink, Sparkles } from 'lucide-react';
-import { useCandidate } from '@/domains/candidates';
+import { useCandidate, getCandidateResumeUrl } from '@/domains/candidates';
 import { getScore, scoreColor } from '@/components/organisms/applications/applicationListHelpers';
+import { toast } from 'sonner';
 
 interface Props {
   candidateId: string | null;
