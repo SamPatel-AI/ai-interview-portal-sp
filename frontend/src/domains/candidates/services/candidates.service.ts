@@ -42,3 +42,7 @@ export async function uploadResume(candidateId: string, file: File) {
   formData.append('resume', file);
   return apiUpload<ApiResponse<{ resume_url: string }>>(`/api/candidates/${candidateId}/resume`, formData);
 }
+
+export async function getCandidateResumeUrl(candidateId: string) {
+  return apiRequest<ApiResponse<{ url: string; expires_in: number }>>(`/api/candidates/${candidateId}/resume`);
+}

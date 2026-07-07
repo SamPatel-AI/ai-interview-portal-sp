@@ -6,8 +6,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Loader2, Mail, Phone, MapPin, FileText, ChevronDown, ExternalLink, Sparkles } from 'lucide-react';
-import { useCandidate } from '@/domains/candidates';
+import { useCandidate, getCandidateResumeUrl } from '@/domains/candidates';
 import { getScore, scoreColor } from '@/components/organisms/applications/applicationListHelpers';
+import { toast } from 'sonner';
 
 interface Props {
   candidateId: string | null;
@@ -17,6 +18,20 @@ interface Props {
 
 export default function CandidateDetailSheet({ candidateId, open, onOpenChange }: Props) {
   const { data, isLoading } = useCandidate(open ? candidateId : null);
+
+  const openResume = async (id: string) => {
+    try {
+      const res = await getCandidateResumeUrl(id);
+      const url = res.data?.url;
+      if (!url) throw new Error('No résumé URL returned');
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      toast.error('Could not open résumé', {
+        description: err instanceof Error ? err.message : 'Please try again.',
+      });
+    }
+  };
+
 
   const c = data?.data;
 
@@ -47,8 +62,8 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
                 {c.work_authorization && <Badge variant="secondary">{c.work_authorization}</Badge>}
               </div>
               {c.resume_url && (
-                <Button variant="outline" size="sm" asChild className="w-fit">
-                  <a href={c.resume_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 mr-1" />View Résumé</a>
+                <Button variant="outline" size="sm" className="w-fit" onClick={() => openResume(c.id)}>
+                  <ExternalLink className="h-3 w-3 mr-1" />View Résumé
                 </Button>
               )}
             </div>
@@ -59,8 +74,8 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium flex items-center gap-2"><FileText className="h-4 w-4" />Resume</h3>
                     {c.resume_url && (
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={c.resume_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 mr-1" />View Resume</a>
+                      <Button variant="outline" size="sm" onClick={() => openResume(c.id)}>
+                        <ExternalLink className="h-3 w-3 mr-1" />View Resume
                       </Button>
                     )}
                     {c.resume_text && (
