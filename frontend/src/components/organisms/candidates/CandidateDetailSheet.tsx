@@ -19,6 +19,20 @@ interface Props {
 export default function CandidateDetailSheet({ candidateId, open, onOpenChange }: Props) {
   const { data, isLoading } = useCandidate(open ? candidateId : null);
 
+  const openResume = async (id: string) => {
+    try {
+      const res = await getCandidateResumeUrl(id);
+      const url = res.data?.url;
+      if (!url) throw new Error('No résumé URL returned');
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      toast.error('Could not open résumé', {
+        description: err instanceof Error ? err.message : 'Please try again.',
+      });
+    }
+  };
+
+
   const c = data?.data;
 
 
