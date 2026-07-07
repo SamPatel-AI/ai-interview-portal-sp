@@ -15,7 +15,7 @@ make up              # Start frontend (:8082) + backend (:3001)
 make down            # Stop both servers
 make validate        # Type-check + lint (run before every push)
 make build           # Production build
-make seed            # Seed demo data (sahil@saanvi.us / Test@1234)
+make seed            # Seed demo data (requires an existing dev user — see backend/src/seed.ts)
 ```
 
 Or run individual servers:
