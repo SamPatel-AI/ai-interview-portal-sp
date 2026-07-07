@@ -60,8 +60,8 @@ export default function CandidateDetailSheet({ candidateId, open, onOpenChange }
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium flex items-center gap-2"><FileText className="h-4 w-4" />Resume</h3>
                     {c.resume_url && (
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={c.resume_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 mr-1" />View Resume</a>
+                      <Button variant="outline" size="sm" onClick={() => openResume(c.id)}>
+                        <ExternalLink className="h-3 w-3 mr-1" />View Resume
                       </Button>
                     )}
                     {c.resume_text && (
