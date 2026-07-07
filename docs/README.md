@@ -13,4 +13,3 @@ Operators start with [`HANDOFF.md`](./HANDOFF.md).
 | [audits/2026-07-02-production-readiness-audit.md](./audits/2026-07-02-production-readiness-audit.md) | Historical | Pre-handoff go-live audit, with per-item resolution status and operational runbooks |
 | [FUTURE-FEATURES.md](./FUTURE-FEATURES.md) | Active | Feature roadmap and implementation order |
 | [lovable-prompts/](./lovable-prompts/) | Active | Frontend change prompts for Lovable (the frontend is edited only via Lovable) |
-| [superpowers/specs/](./superpowers/specs/) | Completed | Approved design docs (pipeline model, production deployment, Retell sync + guided builder) |
