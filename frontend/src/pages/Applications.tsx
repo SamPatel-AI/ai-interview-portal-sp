@@ -52,6 +52,7 @@ export default function Applications() {
 
   const openInviteDialog = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (approveInterviewMutation.isPending) return;
     const app = kanbanApps.find((a) => a.id === id);
     if (!app) return;
     const existing = app.jobs?.interview_deadline;
@@ -135,6 +136,8 @@ export default function Applications() {
           onShortlist={handleShortlist}
           onRecall={handleRecall}
           onResendInvite={handleResendInvite}
+          invitePending={approveInterviewMutation.isPending}
+          resendPending={resendInviteMutation.isPending}
         />
       ) : (
         <ApplicationsTable apps={filteredApps} onOpenDetail={openDetail} />

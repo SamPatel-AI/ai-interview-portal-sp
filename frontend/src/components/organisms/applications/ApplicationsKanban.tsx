@@ -21,6 +21,8 @@ interface Props {
   onShortlist: (id: string) => void;
   onRecall: (id: string) => void;
   onResendInvite: (id: string) => void;
+  invitePending?: boolean;
+  resendPending?: boolean;
 }
 
 type ColumnKey = 'new' | 'in_progress' | 'interviewed' | 'shortlisted';
@@ -43,7 +45,7 @@ function columnFor(stage: PipelineStage): ColumnKey | null {
 const stop = (fn: () => void) => (e: React.MouseEvent) => { e.stopPropagation(); fn(); };
 
 export default function ApplicationsKanban({
-  apps, onOpenDetail, onInvite, onReject, onShortlist, onRecall, onResendInvite,
+  apps, onOpenDetail, onInvite, onReject, onShortlist, onRecall, onResendInvite, invitePending, resendPending,
 }: Props) {
   const grouped: Record<ColumnKey, Application[]> = { new: [], in_progress: [], interviewed: [], shortlisted: [] };
   apps.forEach((a) => {
@@ -93,6 +95,7 @@ export default function ApplicationsKanban({
                               variant="outline"
                               className="h-7 flex-1 text-xs text-accent hover:bg-accent/10 hover:text-accent border-accent/20"
                               onClick={(e) => onInvite(app.id, e)}
+                              disabled={invitePending}
                             >
                               <Mail className="h-3 w-3 mr-1" />Send Invite
                             </Button>
@@ -159,6 +162,7 @@ export default function ApplicationsKanban({
                               variant="outline"
                               className="h-7 flex-1 text-xs"
                               onClick={stop(() => onResendInvite(app.id))}
+                              disabled={resendPending}
                             >
                               <RotateCw className="h-3 w-3 mr-1" />Re-send
                             </Button>
