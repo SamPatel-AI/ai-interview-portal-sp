@@ -32,12 +32,8 @@ export default function Applications() {
   // List view: full record (every pipeline_stage incl. archived), paginated.
   const listQuery = useApplications({ page });
 
-  // Kanban view: 5 stages (archived hidden by definition).
-  const newQuery = useApplications({ pipeline_stage: 'new' });
-  const inProgressQuery = useApplications({ pipeline_stage: 'in_progress' });
-  const interviewedQuery = useApplications({ pipeline_stage: 'interviewed' });
-  const failedQuery = useApplications({ pipeline_stage: 'failed' });
-  const shortlistedQuery = useApplications({ pipeline_stage: 'shortlisted' });
+  // Kanban view: single query; each row carries its server-derived pipeline_stage.
+  const kanbanQuery = useApplications({ limit: PAGE_SIZE.XL });
 
   const approveInterviewMutation = useApproveInterview();
   const updateStatusMutation = useUpdateApplication();
