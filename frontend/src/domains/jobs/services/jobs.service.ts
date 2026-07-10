@@ -15,7 +15,7 @@ export async function createJob(input: CreateJobInput) {
   return apiRequest<ApiResponse<Job>>('/api/jobs', { method: 'POST', body: JSON.stringify(input) });
 }
 
-export async function updateJob(id: string, input: Partial<CreateJobInput> & { status?: string }) {
+export async function updateJob(id: string, input: Partial<Omit<CreateJobInput, 'ai_agent_id'>> & { status?: string; ai_agent_id?: string | null }) {
   return apiRequest<ApiResponse<Job>>(`/api/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
 }
 
