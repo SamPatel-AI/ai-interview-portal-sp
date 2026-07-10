@@ -98,12 +98,8 @@ export default function Applications() {
     ? sourceApps
     : sourceApps.filter((app) => app.jobs?.client_companies?.name === selectedCompany);
 
-  const isLoading = view === 'kanban'
-    ? newQuery.isLoading || inProgressQuery.isLoading || interviewedQuery.isLoading || failedQuery.isLoading || shortlistedQuery.isLoading
-    : listQuery.isLoading;
-  const error = view === 'kanban'
-    ? newQuery.error || inProgressQuery.error || interviewedQuery.error || failedQuery.error || shortlistedQuery.error
-    : listQuery.error;
+  const isLoading = view === 'kanban' ? kanbanQuery.isLoading : listQuery.isLoading;
+  const error = view === 'kanban' ? kanbanQuery.error : listQuery.error;
 
   if (isLoading) return <TableSkeleton cols={6} />;
   if (error) return <EmptyState icon={ClipboardCheck} title="Failed to load applications" description={error instanceof Error ? error.message : 'An error occurred'} />;
