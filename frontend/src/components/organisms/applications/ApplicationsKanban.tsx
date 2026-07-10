@@ -162,6 +162,7 @@ export default function ApplicationsKanban({
                               variant="outline"
                               className="h-7 flex-1 text-xs"
                               onClick={stop(() => onResendInvite(app.id))}
+                              disabled={resendPending}
                             >
                               <RotateCw className="h-3 w-3 mr-1" />Re-send
                             </Button>
