@@ -2,17 +2,21 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Loader2, MapPin, Building2, Bot, User, Briefcase,
   FileCode, DollarSign, Globe, Clock, Hash,
 } from 'lucide-react';
-import { useJob } from '@/domains/jobs';
+import { useJob, useUpdateJob } from '@/domains/jobs';
+import { useAgents } from '@/domains/agents';
 import { getScore, scoreColor } from '@/components/organisms/applications/applicationListHelpers';
 import {
   JOB_STATUS_COLORS_BORDER,
   APPLICATION_STATUS_COLORS,
   EMPLOYMENT_TYPE_LABELS,
 } from '@/lib/constants';
+
+const DEFAULT_AGENT_VALUE = '__default__';
 
 interface JobApplication {
   id: string;
