@@ -52,6 +52,7 @@ export default function Applications() {
 
   const openInviteDialog = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (approveInterviewMutation.isPending) return;
     const app = kanbanApps.find((a) => a.id === id);
     if (!app) return;
     const existing = app.jobs?.interview_deadline;
