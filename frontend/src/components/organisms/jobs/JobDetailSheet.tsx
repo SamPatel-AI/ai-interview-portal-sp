@@ -57,6 +57,9 @@ export default function JobDetailSheet({ jobId, open, onOpenChange }: Props) {
   const job = data?.data as unknown as JobDetail | undefined;
   const applications = job?.applications ?? [];
   const locationParts = [job?.location, job?.state, job?.country].filter(Boolean);
+  const { data: agentsData } = useAgents();
+  const agents = (agentsData?.data ?? []) as Array<{ id: string; name: string }>;
+  const updateJob = useUpdateJob();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
