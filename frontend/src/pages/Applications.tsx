@@ -18,6 +18,7 @@ import {
   type Application,
 } from '@/domains/applications';
 import { useInitiateCall } from '@/domains/calls';
+import { PAGE_SIZE } from '@/lib/constants';
 
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
@@ -32,12 +33,8 @@ export default function Applications() {
   // List view: full record (every pipeline_stage incl. archived), paginated.
   const listQuery = useApplications({ page });
 
-  // Kanban view: 5 stages (archived hidden by definition).
-  const newQuery = useApplications({ pipeline_stage: 'new' });
-  const inProgressQuery = useApplications({ pipeline_stage: 'in_progress' });
-  const interviewedQuery = useApplications({ pipeline_stage: 'interviewed' });
-  const failedQuery = useApplications({ pipeline_stage: 'failed' });
-  const shortlistedQuery = useApplications({ pipeline_stage: 'shortlisted' });
+  // Kanban view: single query; each row carries its server-derived pipeline_stage.
+  const kanbanQuery = useApplications({ limit: PAGE_SIZE.XL });
 
   const approveInterviewMutation = useApproveInterview();
   const updateStatusMutation = useUpdateApplication();
@@ -50,13 +47,8 @@ export default function Applications() {
   const handleResendInvite = (id: string) => resendInviteMutation.mutate(id);
   const openDetail = (id: string) => { setSelectedAppId(id); setSheetOpen(true); };
 
-  const kanbanApps = useMemo(() => [
-    ...(newQuery.data?.data ?? []),
-    ...(inProgressQuery.data?.data ?? []),
-    ...(interviewedQuery.data?.data ?? []),
-    ...(failedQuery.data?.data ?? []),
-    ...(shortlistedQuery.data?.data ?? []),
-  ], [newQuery.data, inProgressQuery.data, interviewedQuery.data, failedQuery.data, shortlistedQuery.data]);
+  const kanbanApps = kanbanQuery.data?.data ?? [];
+
 
   const openInviteDialog = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -106,12 +98,8 @@ export default function Applications() {
     ? sourceApps
     : sourceApps.filter((app) => app.jobs?.client_companies?.name === selectedCompany);
 
-  const isLoading = view === 'kanban'
-    ? newQuery.isLoading || inProgressQuery.isLoading || interviewedQuery.isLoading || failedQuery.isLoading || shortlistedQuery.isLoading
-    : listQuery.isLoading;
-  const error = view === 'kanban'
-    ? newQuery.error || inProgressQuery.error || interviewedQuery.error || failedQuery.error || shortlistedQuery.error
-    : listQuery.error;
+  const isLoading = view === 'kanban' ? kanbanQuery.isLoading : listQuery.isLoading;
+  const error = view === 'kanban' ? kanbanQuery.error : listQuery.error;
 
   if (isLoading) return <TableSkeleton cols={6} />;
   if (error) return <EmptyState icon={ClipboardCheck} title="Failed to load applications" description={error instanceof Error ? error.message : 'An error occurred'} />;
