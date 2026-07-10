@@ -269,67 +269,88 @@ router.post(
       if (!candidate?.email) throw new AppError(400, 'Candidate has no email address');
       if (!job?.title) throw new AppError(400, 'Job information missing');
 
-      // Check if invitation was already sent
-      const { data: existingEmail } = await supabaseAdmin
-        .from('email_logs')
-        .select('id')
-        .eq('application_id', req.params.id)
-        .eq('type', 'invitation')
-        .limit(1);
-
-      if (existingEmail && existingEmail.length > 0) {
+      // Claim the first-invite slot ATOMICALLY: the conditional update only
+      // matches while invitation_sent_at is NULL, so of two concurrent clicks
+      // exactly one claims and the other gets the 409 — unlike the previous
+      // email_logs pre-check, which both requests could pass before either
+      // inserted. Explicit resends go through /resend-invitation.
+      const { data: claimed, error: claimErr } = await supabaseAdmin
+        .from('applications')
+        .update({ invitation_sent_at: new Date().toISOString() })
+        .eq('id', req.params.id)
+        .eq('org_id', req.user!.org_id)
+        .is('invitation_sent_at', null)
+        .select('id');
+      if (claimErr) {
+        logger.error('approve-interview: invitation claim failed', claimErr);
+        throw new AppError(500, 'Failed to record the invitation send.');
+      }
+      if (!claimed || claimed.length === 0) {
         throw new AppError(409, 'Invitation email has already been sent for this application');
       }
 
-      // Deadline lives on the JOB. Use the job's deadline; if it has none yet,
-      // require one in the body (first invite for this job) and set it on the job.
-      const { deadline } = req.body as { deadline?: string };
-      let deadlineDate: Date | null = job.interview_deadline ? new Date(job.interview_deadline) : null;
+      // Past this point any failure must release the claim so the invite can
+      // be retried — otherwise a validation 400 or send error bricks the app.
+      try {
+        // Deadline lives on the JOB. Use the job's deadline; if it has none yet,
+        // require one in the body (first invite for this job) and set it on the job.
+        const { deadline } = req.body as { deadline?: string };
+        let deadlineDate: Date | null = job.interview_deadline ? new Date(job.interview_deadline) : null;
 
-      if (!deadlineDate) {
-        if (!deadline) {
-          throw new AppError(400, 'An interview deadline must be set for this job before sending invites.');
+        if (!deadlineDate) {
+          if (!deadline) {
+            throw new AppError(400, 'An interview deadline must be set for this job before sending invites.');
+          }
+          deadlineDate = new Date(deadline);
+          if (Number.isNaN(deadlineDate.getTime())) {
+            throw new AppError(400, 'Invalid interview deadline date.');
+          }
+          if (deadlineDate.getTime() <= Date.now()) {
+            throw new AppError(400, 'Interview deadline must be a future date.');
+          }
+          await supabaseAdmin
+            .from('jobs')
+            .update({ interview_deadline: deadlineDate.toISOString() })
+            .eq('id', job.id);
         }
-        deadlineDate = new Date(deadline);
-        if (Number.isNaN(deadlineDate.getTime())) {
-          throw new AppError(400, 'Invalid interview deadline date.');
-        }
-        if (deadlineDate.getTime() <= Date.now()) {
-          throw new AppError(400, 'Interview deadline must be a future date.');
-        }
-        await supabaseAdmin
-          .from('jobs')
+
+        // Mirror the effective deadline onto the application for its own record.
+        const { error: mirrorErr } = await supabaseAdmin
+          .from('applications')
           .update({ interview_deadline: deadlineDate.toISOString() })
-          .eq('id', job.id);
+          .eq('id', req.params.id);
+        if (mirrorErr) {
+          logger.error('approve-interview: failed to mirror deadline to application', mirrorErr);
+          throw new AppError(500, 'Failed to record the interview deadline on the application.');
+        }
+
+        // Drive the booking window into Cal.com so candidates can't pick a slot
+        // past the deadline (UX layer; the webhook backstop guarantees correctness
+        // regardless). Best-effort — never block the invite on a Cal.com hiccup.
+        const { setEventTypeBookingWindow } = await import('../services/cal.service');
+        setEventTypeBookingWindow(deadlineDate).catch((e) =>
+          logger.error('approve-interview: failed to set Cal.com booking window', e),
+        );
+
+        // Send invitation email (capped to the job deadline)
+        const { sendInvitationEmail } = await import('../services/email.service');
+        await sendInvitationEmail(
+          { id: candidate.id, first_name: candidate.first_name, last_name: candidate.last_name, email: candidate.email },
+          job.title,
+          req.params.id as string,
+          deadlineDate,
+          job.id
+        );
+      } catch (claimedErr) {
+        const { error: releaseErr } = await supabaseAdmin
+          .from('applications')
+          .update({ invitation_sent_at: null })
+          .eq('id', req.params.id);
+        if (releaseErr) {
+          logger.error('approve-interview: failed to release invitation claim', releaseErr);
+        }
+        throw claimedErr;
       }
-
-      // Mirror the effective deadline onto the application for its own record.
-      const { error: mirrorErr } = await supabaseAdmin
-        .from('applications')
-        .update({ interview_deadline: deadlineDate.toISOString() })
-        .eq('id', req.params.id);
-      if (mirrorErr) {
-        logger.error('approve-interview: failed to mirror deadline to application', mirrorErr);
-        throw new AppError(500, 'Failed to record the interview deadline on the application.');
-      }
-
-      // Drive the booking window into Cal.com so candidates can't pick a slot
-      // past the deadline (UX layer; the webhook backstop guarantees correctness
-      // regardless). Best-effort — never block the invite on a Cal.com hiccup.
-      const { setEventTypeBookingWindow } = await import('../services/cal.service');
-      setEventTypeBookingWindow(deadlineDate).catch((e) =>
-        logger.error('approve-interview: failed to set Cal.com booking window', e),
-      );
-
-      // Send invitation email (capped to the job deadline)
-      const { sendInvitationEmail } = await import('../services/email.service');
-      await sendInvitationEmail(
-        { id: candidate.id, first_name: candidate.first_name, last_name: candidate.last_name, email: candidate.email },
-        job.title,
-        req.params.id as string,
-        deadlineDate,
-        job.id
-      );
 
       await supabaseAdmin.from('activity_log').insert({
         org_id: req.user!.org_id,
