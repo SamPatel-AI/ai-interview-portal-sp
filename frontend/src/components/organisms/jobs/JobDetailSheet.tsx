@@ -2,17 +2,21 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Loader2, MapPin, Building2, Bot, User, Briefcase,
   FileCode, DollarSign, Globe, Clock, Hash,
 } from 'lucide-react';
-import { useJob } from '@/domains/jobs';
+import { useJob, useUpdateJob } from '@/domains/jobs';
+import { useAgents } from '@/domains/agents';
 import { getScore, scoreColor } from '@/components/organisms/applications/applicationListHelpers';
 import {
   JOB_STATUS_COLORS_BORDER,
   APPLICATION_STATUS_COLORS,
   EMPLOYMENT_TYPE_LABELS,
 } from '@/lib/constants';
+
+const DEFAULT_AGENT_VALUE = '__default__';
 
 interface JobApplication {
   id: string;
@@ -53,6 +57,9 @@ export default function JobDetailSheet({ jobId, open, onOpenChange }: Props) {
   const job = data?.data as unknown as JobDetail | undefined;
   const applications = job?.applications ?? [];
   const locationParts = [job?.location, job?.state, job?.country].filter(Boolean);
+  const { data: agentsData } = useAgents();
+  const agents = (agentsData?.data ?? []) as Array<{ id: string; name: string }>;
+  const updateJob = useUpdateJob();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -104,9 +111,29 @@ export default function JobDetailSheet({ jobId, open, onOpenChange }: Props) {
                   {job.users && (
                     <InfoItem icon={User} label="Recruiter" value={job.users.full_name} />
                   )}
-                  {job.ai_agents && (
-                    <InfoItem icon={Bot} label="AI Agent" value={`${job.ai_agents.name} (${job.ai_agents.interview_style})`} />
-                  )}
+                  <div className="flex items-start gap-2.5 p-3 bg-muted/50 rounded-lg col-span-2">
+                    <Bot className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-muted-foreground mb-1">AI Agent</p>
+                      <Select
+                        value={job.ai_agents?.id ?? DEFAULT_AGENT_VALUE}
+                        onValueChange={(val) =>
+                          updateJob.mutate({ id: job.id, ai_agent_id: val === DEFAULT_AGENT_VALUE ? null : val })
+                        }
+                        disabled={updateJob.isPending}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Default agent" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={DEFAULT_AGENT_VALUE}>Default agent</SelectItem>
+                          {agents.map((a) => (
+                            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   <InfoItem
                     icon={Clock}
                     label="Created"

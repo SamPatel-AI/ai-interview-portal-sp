@@ -70,7 +70,7 @@ export default function Jobs() {
                         {j.status?.replace('_', ' ')}
                       </span>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{j.ai_agents?.name ?? 'None'}</TableCell>
+                    <TableCell className="text-muted-foreground">{j.ai_agents?.name ?? 'Default'}</TableCell>
                     <TableCell>{j.applications_count ?? 0}</TableCell>
                     <TableCell className="text-muted-foreground">{formatDate(j.created_at)}</TableCell>
                   </TableRow>
