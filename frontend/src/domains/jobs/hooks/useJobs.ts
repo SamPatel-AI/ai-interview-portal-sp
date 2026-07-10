@@ -35,7 +35,7 @@ export function useUpdateJob() {
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string } & Partial<CreateJobInput> & { status?: string }) => service.updateJob(id, input),
+    mutationFn: ({ id, ...input }: { id: string } & Partial<Omit<CreateJobInput, 'ai_agent_id'>> & { status?: string; ai_agent_id?: string | null }) => service.updateJob(id, input),
     onSuccess: () => { qc.invalidateQueries({ queryKey: jobKeys.all }); toast({ title: 'Job updated' }); },
     onError: (err: Error) => { toast({ title: 'Failed to update job', description: err.message, variant: 'destructive' }); },
   });
