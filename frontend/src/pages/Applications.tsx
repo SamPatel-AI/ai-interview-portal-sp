@@ -18,6 +18,7 @@ import {
   type Application,
 } from '@/domains/applications';
 import { useInitiateCall } from '@/domains/calls';
+import { PAGE_SIZE } from '@/lib/constants';
 
 export default function Applications() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
