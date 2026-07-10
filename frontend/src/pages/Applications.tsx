@@ -136,6 +136,8 @@ export default function Applications() {
           onShortlist={handleShortlist}
           onRecall={handleRecall}
           onResendInvite={handleResendInvite}
+          invitePending={approveInterviewMutation.isPending}
+          resendPending={resendInviteMutation.isPending}
         />
       ) : (
         <ApplicationsTable apps={filteredApps} onOpenDetail={openDetail} />
