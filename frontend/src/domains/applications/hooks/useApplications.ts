@@ -5,10 +5,11 @@ import * as service from '../services/applications.service';
 import type { CreateApplicationInput } from '../types';
 import { STALE, PAGE_SIZE } from '@/lib/constants';
 
-export function useApplications(params: { page?: number; job_id?: string; status?: string; pipeline_stage?: string; recruiter_id?: string } = {}) {
+export function useApplications(params: { page?: number; limit?: number; job_id?: string; status?: string; recruiter_id?: string } = {}) {
+  const { limit = PAGE_SIZE.MD, ...rest } = params;
   return useQuery({
-    queryKey: applicationKeys.list(params),
-    queryFn: () => service.fetchApplications({ ...params, limit: PAGE_SIZE.MD }),
+    queryKey: applicationKeys.list({ ...rest, limit }),
+    queryFn: () => service.fetchApplications({ ...rest, limit }),
     staleTime: STALE.MEDIUM,
   });
 }
