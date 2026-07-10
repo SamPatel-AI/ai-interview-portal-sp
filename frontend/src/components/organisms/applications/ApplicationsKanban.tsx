@@ -45,7 +45,7 @@ function columnFor(stage: PipelineStage): ColumnKey | null {
 const stop = (fn: () => void) => (e: React.MouseEvent) => { e.stopPropagation(); fn(); };
 
 export default function ApplicationsKanban({
-  apps, onOpenDetail, onInvite, onReject, onShortlist, onRecall, onResendInvite,
+  apps, onOpenDetail, onInvite, onReject, onShortlist, onRecall, onResendInvite, invitePending, resendPending,
 }: Props) {
   const grouped: Record<ColumnKey, Application[]> = { new: [], in_progress: [], interviewed: [], shortlisted: [] };
   apps.forEach((a) => {
