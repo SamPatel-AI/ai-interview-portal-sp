@@ -378,6 +378,23 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
   let linked = 0;
   let skipped = 0;
 
+  // Known CEIPAL job codes for this org — only feeds the created/updated
+  // counters below; correctness against duplicates comes from the unique
+  // index (migration 019) that arbitrates the upsert.
+  const existingCodes = new Set<string>();
+  for (let from = 0; ; from += 1000) {
+    const { data: codePage } = await supabaseAdmin
+      .from('jobs')
+      .select('ceipal_job_id')
+      .eq('org_id', orgId)
+      .not('ceipal_job_id', 'is', null)
+      .range(from, from + 999);
+    for (const row of codePage ?? []) {
+      if (row.ceipal_job_id) existingCodes.add(row.ceipal_job_id);
+    }
+    if (!codePage || codePage.length < 1000) break;
+  }
+
   for (const cJob of ceipalJobs) {
     const jobCode = cJob.job_code || '';
     const status = mapJobStatus(cJob.job_status);
@@ -418,31 +435,44 @@ export async function syncCeipalJobs(orgId: string, clientCompanyId?: string): P
       synced_at: new Date().toISOString(),
     };
 
-    // Check if job already exists
-    const { data: existing } = await supabaseAdmin
-      .from('jobs')
-      .select('id')
-      .eq('org_id', orgId)
-      .eq('ceipal_job_id', jobCode)
-      .single();
+    // A posting without a job code has no identity to dedupe on — skip it
+    // rather than stacking anonymous rows (pre-019 these were stored as '').
+    if (!jobCode) {
+      skipped++;
+      continue;
+    }
 
-    if (existing) {
-      // Always keep existing rows current (a job that closed gets status=closed
-      // and is then hidden by the open-only views).
-      await supabaseAdmin.from('jobs').update(fields).eq('id', existing.id);
+    const known = existingCodes.has(jobCode);
+
+    if (isOpen) {
+      // Upsert keyed on the unique index (migration 019): creates the row or
+      // keeps an existing one current, atomically — concurrent syncs can no
+      // longer double-insert, and duplicates can't compound.
+      const { error: upsertError } = await supabaseAdmin
+        .from('jobs')
+        .upsert(
+          { org_id: orgId, ceipal_job_id: jobCode, ...fields },
+          { onConflict: 'org_id,ceipal_job_id' },
+        );
+      if (upsertError) {
+        logger.error(`CEIPAL sync: upsert failed for job ${jobCode}: ${upsertError.message}`);
+        continue;
+      }
+      if (known) {
+        updated++;
+      } else {
+        created++;
+        existingCodes.add(jobCode);
+      }
+      if (resolvedClientId) linked++;
+    } else if (known) {
+      // Keep existing rows current (a job that closed gets status=closed and
+      // is then hidden by the open-only views).
+      await supabaseAdmin.from('jobs').update(fields).eq('org_id', orgId).eq('ceipal_job_id', jobCode);
       updated++;
-      if (isOpen && resolvedClientId) linked++;
-    } else if (isOpen) {
+    } else {
       // Only ingest OPEN postings — skip closed/filled/on-hold history so the
       // pipeline tracks live reqs, not CEIPAL's full archive.
-      await supabaseAdmin.from('jobs').insert({
-        org_id: orgId,
-        ceipal_job_id: jobCode,
-        ...fields,
-      });
-      created++;
-      if (resolvedClientId) linked++;
-    } else {
       skipped++;
     }
   }

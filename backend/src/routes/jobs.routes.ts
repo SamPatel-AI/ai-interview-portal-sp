@@ -206,10 +206,21 @@ router.post(
       // The full client+job sync is call-heavy (one CEIPAL request per client +
       // throttle/backoff) and exceeds the HTTP request window — enqueue it onto
       // the BullMQ worker so it always runs to completion in the background.
-      const job = await ceipalSyncQueue.add('manual-sync', {
-        orgId: req.user!.org_id,
-        clientCompanyId: client_company_id,
-      });
+      // Stable jobId dedupes rapid re-clicks: while a manual sync for this org
+      // is queued or running, add() returns the existing job instead of
+      // stacking another. removeOnComplete/Fail frees the id for the next run.
+      const job = await ceipalSyncQueue.add(
+        'manual-sync',
+        {
+          orgId: req.user!.org_id,
+          clientCompanyId: client_company_id,
+        },
+        {
+          jobId: `ceipal-manual-${req.user!.org_id}`,
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
 
       await supabaseAdmin.from('activity_log').insert({
         org_id: req.user!.org_id,

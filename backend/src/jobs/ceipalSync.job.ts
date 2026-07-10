@@ -33,7 +33,10 @@ export const ceipalSyncWorker = new Worker(
   },
   {
     connection: redis,
-    concurrency: 2,
+    // Serialized on purpose: a manual sync must not interleave with the
+    // scheduled one for the same org (the upsert makes overlap harmless for
+    // correctness, but serial runs keep CEIPAL API pressure and logs sane).
+    concurrency: 1,
   }
 );
 
