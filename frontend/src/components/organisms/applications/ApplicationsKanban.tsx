@@ -21,6 +21,8 @@ interface Props {
   onShortlist: (id: string) => void;
   onRecall: (id: string) => void;
   onResendInvite: (id: string) => void;
+  invitePending?: boolean;
+  resendPending?: boolean;
 }
 
 type ColumnKey = 'new' | 'in_progress' | 'interviewed' | 'shortlisted';
