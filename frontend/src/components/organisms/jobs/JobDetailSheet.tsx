@@ -111,9 +111,29 @@ export default function JobDetailSheet({ jobId, open, onOpenChange }: Props) {
                   {job.users && (
                     <InfoItem icon={User} label="Recruiter" value={job.users.full_name} />
                   )}
-                  {job.ai_agents && (
-                    <InfoItem icon={Bot} label="AI Agent" value={`${job.ai_agents.name} (${job.ai_agents.interview_style})`} />
-                  )}
+                  <div className="flex items-start gap-2.5 p-3 bg-muted/50 rounded-lg col-span-2">
+                    <Bot className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-muted-foreground mb-1">AI Agent</p>
+                      <Select
+                        value={job.ai_agents?.id ?? DEFAULT_AGENT_VALUE}
+                        onValueChange={(val) =>
+                          updateJob.mutate({ id: job.id, ai_agent_id: val === DEFAULT_AGENT_VALUE ? null : val })
+                        }
+                        disabled={updateJob.isPending}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Default agent" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={DEFAULT_AGENT_VALUE}>Default agent</SelectItem>
+                          {agents.map((a) => (
+                            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   <InfoItem
                     icon={Clock}
                     label="Created"
