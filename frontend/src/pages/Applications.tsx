@@ -47,13 +47,8 @@ export default function Applications() {
   const handleResendInvite = (id: string) => resendInviteMutation.mutate(id);
   const openDetail = (id: string) => { setSelectedAppId(id); setSheetOpen(true); };
 
-  const kanbanApps = useMemo(() => [
-    ...(newQuery.data?.data ?? []),
-    ...(inProgressQuery.data?.data ?? []),
-    ...(interviewedQuery.data?.data ?? []),
-    ...(failedQuery.data?.data ?? []),
-    ...(shortlistedQuery.data?.data ?? []),
-  ], [newQuery.data, inProgressQuery.data, interviewedQuery.data, failedQuery.data, shortlistedQuery.data]);
+  const kanbanApps = kanbanQuery.data?.data ?? [];
+
 
   const openInviteDialog = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
